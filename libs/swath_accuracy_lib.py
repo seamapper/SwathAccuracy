@@ -3168,6 +3168,7 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 	real_beam_angle = np.asarray(self.xline['beam_angle'])[real_filt_idx].tolist()  # real, filtered beam angles
 	real_dz_ref_wd = np.asarray(self.xline['dz_ref_wd'])[real_filt_idx].tolist()  # real, filtered dz results as %WD
 	real_dz_ref = np.asarray(self.xline['dz_ref'])[real_filt_idx].tolist()  # real, filtered dz results in meters
+	real_fname = np.asarray(self.xline['fname'])[real_filt_idx].tolist()  # real, filtered filenames
 
 	# calculate mean bias of filtered results across whole swath
 	# offsets to apply to each real, filtered sounding to plot with zero mean
@@ -3211,12 +3212,13 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 	# print('got real_dz_wd_bin_mean with len=', len(real_dz_wd_bin_mean), ' and = ', real_dz_wd_bin_mean)
 	# print('got real_dz_wd_bin_mean_mean = ', real_dz_wd_bin_mean_mean)
 
-	dec_data = decimate_data(self, data_list=[real_beam_angle, real_dz_ref_wd, real_dz_wd_bin_zero_mean])
+	dec_data = decimate_data(self, data_list=[real_beam_angle, real_dz_ref_wd, real_dz_wd_bin_zero_mean, real_fname])
 
 	# print('back from decimate_data, dz_dec has len=', len(dec_data))
 	real_beam_angle_dec = dec_data[0]
 	real_dz_ref_wd_dec = dec_data[1]
 	real_dz_wd_bin_zero_mean_dec = dec_data[2]
+	real_fname_dec = dec_data[3] if len(dec_data) > 3 else real_fname[:len(real_beam_angle_dec)]
 
 	real_dz_wd_bin_zero_mean_plot = [x - y for x, y in zip(real_dz_ref_wd_dec, real_dz_wd_bin_zero_mean_dec)]  # offsets to real filtered soundings for flat curve forced to zero mean
 	real_dz_wd_bin_flat_mean_plot = [x + real_dz_wd_bin_mean_mean for x in real_dz_wd_bin_zero_mean_plot]  # offsets to real filtered soundings for flat curve preserving mean bias
@@ -3236,8 +3238,23 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 
 			print('\n\n################# ZERO MEAN IS CHECKED ######################\n\n')
 			# plot the raw differences, mean, and +/- 1 sigma as %wd versus beam angle, forcing the mean bias to zero
-			self.ax2.scatter(real_beam_angle_dec, real_dz_wd_bin_zero_mean_plot,
-							 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
+			if hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked():
+				# Group points by filename and assign colors from tab10 colormap
+				import matplotlib.cm as cm
+				unique_fnames = list(set(real_fname_dec))
+				cmap = cm.get_cmap('tab10')
+				fname_to_color = {fname: cmap(i % 10) for i, fname in enumerate(unique_fnames)}
+				# Plot each file's points separately with its assigned color
+				for fname in unique_fnames:
+					file_indices = [i for i, f in enumerate(real_fname_dec) if f == fname]
+					if file_indices:
+						file_angles = [real_beam_angle_dec[i] for i in file_indices]
+						file_dz = [real_dz_wd_bin_zero_mean_plot[i] for i in file_indices]
+						self.ax2.scatter(file_angles, file_dz,
+										 marker='o', color=fname_to_color[fname], s=self.pt_size, alpha=self.pt_alpha)
+			else:
+				self.ax2.scatter(real_beam_angle_dec, real_dz_wd_bin_zero_mean_plot,
+								 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
 
 			self.ax2.plot(beam_bin_centers, np.asarray(self.beam_bin_dz_wd_zero), '-',
 						  linewidth=self.lwidth, color='r')  # beamwise bin mean diff
@@ -3253,8 +3270,23 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 			# plot the raw differences, mean, and +/- 1 sigma as %wd versus beam angle, keeping the mean bias
 
 			print('**** ZERO mean is NOT checked... keeping mean from user-defined portion ')
-			self.ax2.scatter(real_beam_angle_dec, real_dz_wd_bin_flat_mean_plot,
-							 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
+			if hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked():
+				# Group points by filename and assign colors from tab10 colormap
+				import matplotlib.cm as cm
+				unique_fnames = list(set(real_fname_dec))
+				cmap = cm.get_cmap('tab10')
+				fname_to_color = {fname: cmap(i % 10) for i, fname in enumerate(unique_fnames)}
+				# Plot each file's points separately with its assigned color
+				for fname in unique_fnames:
+					file_indices = [i for i, f in enumerate(real_fname_dec) if f == fname]
+					if file_indices:
+						file_angles = [real_beam_angle_dec[i] for i in file_indices]
+						file_dz = [real_dz_wd_bin_flat_mean_plot[i] for i in file_indices]
+						self.ax2.scatter(file_angles, file_dz,
+										 marker='o', color=fname_to_color[fname], s=self.pt_size, alpha=self.pt_alpha)
+			else:
+				self.ax2.scatter(real_beam_angle_dec, real_dz_wd_bin_flat_mean_plot,
+								 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
 
 			self.ax2.plot(beam_bin_centers, np.add(np.asarray(self.beam_bin_dz_wd_zero), real_dz_wd_bin_mean_mean), '-',
 						  linewidth=self.lwidth, color='r')  # beamwise bin mean diff
@@ -3271,8 +3303,23 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 		print('\n\n----------> FLATTEN MEAN IS NOT CHECKED\n\n')
 
 		# plot the raw differences, mean, and +/- 1 sigma as %wd versus beam angle
-		self.ax2.scatter(real_beam_angle_dec, real_dz_ref_wd_dec,
-						 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
+		if hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked():
+			# Group points by filename and assign colors from tab10 colormap
+			import matplotlib.cm as cm
+			unique_fnames = list(set(real_fname_dec))
+			cmap = cm.get_cmap('tab10')
+			fname_to_color = {fname: cmap(i % 10) for i, fname in enumerate(unique_fnames)}
+			# Plot each file's points separately with its assigned color
+			for fname in unique_fnames:
+				file_indices = [i for i, f in enumerate(real_fname_dec) if f == fname]
+				if file_indices:
+					file_angles = [real_beam_angle_dec[i] for i in file_indices]
+					file_dz = [real_dz_ref_wd_dec[i] for i in file_indices]
+					self.ax2.scatter(file_angles, file_dz,
+									 marker='o', color=fname_to_color[fname], s=self.pt_size, alpha=self.pt_alpha)
+		else:
+			self.ax2.scatter(real_beam_angle_dec, real_dz_ref_wd_dec,
+							 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
 
 		# raw differences from reference grid, small gray points
 		self.ax2.plot(beam_bin_centers, self.beam_bin_dz_wd_mean, '-',
@@ -4885,6 +4932,7 @@ def save_session(self):
 				'show_order_1b': self.show_order_1b_chk.isChecked(),
 				'show_order_2': self.show_order_2_chk.isChecked(),
 				'show_order_3': self.show_order_3_chk.isChecked(),
+				'unique_line_pt_colors': hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked(),
 				
 				# Flatten swath
 				'flatten_mean_enabled': self.flatten_mean_gb.isChecked(),
@@ -5072,6 +5120,8 @@ def load_session(self):
 		self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
 		self.show_order_2_chk.setChecked(plot_settings.get('show_order_2', False))
 		self.show_order_3_chk.setChecked(plot_settings.get('show_order_3', False))
+		if hasattr(self, 'unique_line_pt_colors_chk'):
+			self.unique_line_pt_colors_chk.setChecked(plot_settings.get('unique_line_pt_colors', False))
 		
 		# Flatten swath
 		self.flatten_mean_gb.setChecked(plot_settings.get('flatten_mean_enabled', False))
@@ -5202,6 +5252,7 @@ def save_current_plot_settings(self):
 			'show_order_1b': self.show_order_1b_chk.isChecked(),
 			'show_order_2': self.show_order_2_chk.isChecked(),
 			'show_order_3': self.show_order_3_chk.isChecked(),
+			'unique_line_pt_colors': hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked(),
 			
 			# Flatten swath settings
 			'flatten_mean_enabled': self.flatten_mean_gb.isChecked(),
@@ -5311,6 +5362,8 @@ def load_last_plot_settings(self):
 		self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
 		self.show_order_2_chk.setChecked(plot_settings.get('show_order_2', False))
 		self.show_order_3_chk.setChecked(plot_settings.get('show_order_3', False))
+		if hasattr(self, 'unique_line_pt_colors_chk'):
+			self.unique_line_pt_colors_chk.setChecked(plot_settings.get('unique_line_pt_colors', False))
 		
 		# Apply flatten swath settings
 		self.flatten_mean_gb.setChecked(plot_settings.get('flatten_mean_enabled', False))
@@ -5379,6 +5432,8 @@ def load_default_plot_settings(self):
 		self.show_order_1b_chk.setChecked(False)
 		self.show_order_2_chk.setChecked(False)
 		self.show_order_3_chk.setChecked(False)
+		if hasattr(self, 'unique_line_pt_colors_chk'):
+			self.unique_line_pt_colors_chk.setChecked(False)
 		
 		# Flatten swath defaults
 		self.flatten_mean_gb.setChecked(False)

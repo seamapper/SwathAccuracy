@@ -60,6 +60,15 @@ License:
 
 ===============================================================================
 """
+# __version__ = "20240217"  # testing Qimera ASCII import
+# __version__ = "0.1.2"  # new version with position time series duplicate filtering per IB Nuyina EM712 example
+# __version__ = "0.1.3"  # added EM2042 model and update pyproj 3.6.1
+# __version__ = "2025.1"  # rewrite with Cursor AI, added shaded relief, special order, and order 1a-3
+# __version__ = "2025.2"  # changes in data management, gui changes, and swath pkl file management
+# __version__ = "2025.3"  # changes in gui, added file management, and added export all to geotiff button
+# __version__ = "2025.5"  # changes in gui, added file management, and added export all to geotiff button
+__version__ = "2025.6"  # changes in gui, added point size and opacity for accuracy and coverage plots
+
 
 import sys
 import os
@@ -85,14 +94,6 @@ from matplotlib.figure import Figure
 from matplotlib.colors import LightSource
 from libs.gui_widgets import *
 from libs.swath_accuracy_lib import *
-
-# __version__ = "20240217"  # testing Qimera ASCII import
-# __version__ = "0.1.2"  # new version with position time series duplicate filtering per IB Nuyina EM712 example
-# __version__ = "0.1.3"  # added EM2042 model and update pyproj 3.6.1
-# __version__ = "2025.1"  # rewrite with Cursor AI, added shaded relief, special order, and order 1a-3
-# __version__ = "2025.2"  # changes in data management, gui changes, and swath pkl file management
-# __version__ = "2025.3"  # changes in gui, added file management, and added export all to geotiff button
-__version__ = "2025.5"  # changes in gui, added file management, and added export all to geotiff button
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -243,7 +244,8 @@ class MainWindow(QtWidgets.QMainWindow):
         chk_acc_map = [self.show_acc_proc_text_chk,
                        # self.grid_lines_toggle_chk,
                        self.IHO_lines_toggle_chk,
-                       self.set_zero_mean_chk]
+                       self.set_zero_mean_chk,
+                       self.unique_line_pt_colors_chk]
 
         chk_ref_map = [self.update_ref_plots_chk,
                        self.show_xline_cov_chk,
@@ -781,6 +783,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.show_order_1b_chk.setChecked(False)
             self.show_order_2_chk.setChecked(False)
             self.show_order_3_chk.setChecked(False)
+            if hasattr(self, 'unique_line_pt_colors_chk'):
+                self.unique_line_pt_colors_chk.setChecked(False)
             
             # Flatten swath defaults
             self.flatten_mean_gb.setChecked(False)
@@ -886,7 +890,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.pt_alpha_acc_tb.setValidator(QDoubleValidator(0, 100, 1))
         acc_pt_alpha_layout = BoxLayout([acc_pt_alpha_lbl, self.pt_alpha_acc_tb], 'h', add_stretch=True)
         
-        acc_groupbox_layout = BoxLayout([acc_pt_size_layout, acc_pt_alpha_layout], 'v')
+        # Add checkbox for unique line point colors
+        self.unique_line_pt_colors_chk = CheckBox('Unique Line Colors', False, 'unique_line_pt_colors_chk',
+                                                  'Color points in the accuracy plot differently based on which crossline file they come from')
+        
+        acc_groupbox_layout = BoxLayout([acc_pt_size_layout, acc_pt_alpha_layout, self.unique_line_pt_colors_chk], 'v')
         acc_groupbox = GroupBox('Accuracy', acc_groupbox_layout, False, False, 'acc_groupbox')
         
         # Surface Coverage groupbox
