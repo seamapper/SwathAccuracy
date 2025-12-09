@@ -29,7 +29,7 @@ Dependencies:
 License:
     BSD 3-Clause License
     
-    Copyright (c) 2019, kjerram, pjohnson
+    Copyright (c) 2025, Center for Coastal and Ocean Mapping / Joint Hydrographic Center, University of New Hampshire
     All rights reserved.
     
     Redistribution and use in source and binary forms, with or without
@@ -110,7 +110,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.mainWidget)
         self.setMinimumWidth(1000)
         self.setMinimumHeight(900)
-        self.setWindowTitle('Swath Accuracy Plotter AI v.%s' % __version__)
+        self.setWindowTitle('Swath Accuracy Plotter v.%s - kjerram@ccom.unh.edu & pjohnson@ccom.unh.edu' % __version__)
         self.setWindowIcon(QtGui.QIcon(os.path.join(self.media_path, "icon.png")))
 
         print("Setting up Windows taskbar icon...")
