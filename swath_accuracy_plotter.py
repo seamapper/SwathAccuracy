@@ -237,7 +237,6 @@ class MainWindow(QtWidgets.QMainWindow):
         cbox_map = [self.model_cbox,
                     self.pt_size_cbox,
                     self.pt_size_cov_cbox,
-                    self.pt_alpha_cbox,
                     self.ref_cbox,
                     self.depth_mode_cbox]  # only one reference in cbox so far
 
@@ -266,7 +265,9 @@ class MainWindow(QtWidgets.QMainWindow):
                       self.cruise_tb,
                       self.max_count_tb,
                       self.dec_fac_tb,
-                      self.max_points_per_bin_tb]
+                      self.max_points_per_bin_tb,
+                      self.pt_alpha_acc_tb,
+                      self.pt_alpha_cov_tb]
                       # self.waterline_tb]
 
         tb_acc_map = [self.max_beam_angle_tb,
@@ -385,9 +386,6 @@ class MainWindow(QtWidgets.QMainWindow):
             chk.stateChanged.connect(lambda _, sender=chk.objectName():
                                      plot_ref_surf(self))
         
-        # Special handling for optimized tide plotting checkbox
-        self.optimized_tide_plotting_chk.stateChanged.connect(lambda _, sender=self.optimized_tide_plotting_chk.objectName():
-                                                              refresh_plot(self, refresh_list=['tide'], sender=sender, set_active_tab=3))
 
         for tb in tb_acc_map:
             # lambda seems to not need _ for tb
@@ -478,12 +476,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                        'and the vertical datum is assumed to match that used during processing of the '
                                        'reference surface.')
 
-        # Add optimize plotting checkbox beneath the Add Tide button
-        self.optimized_tide_plotting_chk = CheckBox('Optimize Plotting', True, 'optimized_tide_plotting_chk',
-                                                    'Use optimized tide plotting (shows crossline time ranges as colored regions over tide curve). '
-                                                    'Much faster than plotting individual ping tide values.')
-
-        tide_btn_gb = GroupBox('Tide', BoxLayout([self.add_tide_btn, self.optimized_tide_plotting_chk], 'v'), False, False, 'tide_btn_gb')
+        tide_btn_gb = GroupBox('Tide', BoxLayout([self.add_tide_btn], 'v'), False, False, 'tide_btn_gb')
 
         self.calc_accuracy_btn = PushButton('Calc Accuracy', btnw, btnh, 'calc_accuracy_btn',
                                             'Calculate accuracy from loaded files')
@@ -762,7 +755,8 @@ class MainWindow(QtWidgets.QMainWindow):
             # Point style defaults
             self.pt_size_cbox.setCurrentIndex(1)  # Point size 1
             self.pt_size_cov_cbox.setCurrentIndex(5)  # Point size 5 for coverage
-            self.pt_alpha_cbox.setCurrentIndex(self.pt_alpha_cbox.count() - 1)  # 100% opacity
+            self.pt_alpha_acc_tb.setText('100')  # default opacity for accuracy
+            self.pt_alpha_cov_tb.setText('6')  # default opacity for coverage
             
             # Plot limits defaults
             self.plot_lim_gb.setChecked(False)
@@ -787,7 +781,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.show_order_1b_chk.setChecked(False)
             self.show_order_2_chk.setChecked(False)
             self.show_order_3_chk.setChecked(False)
-            self.optimized_tide_plotting_chk.setChecked(True)
             
             # Flatten swath defaults
             self.flatten_mean_gb.setChecked(False)
@@ -881,69 +874,88 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.pt_size_cbox.setCurrentIndex(5)
         # pt_size_layout = BoxLayout([pt_size_lbl, self.pt_size_cbox], 'h', add_stretch=True)
 
-        pt_size_lbl = Label('Point size:', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        # Accuracy groupbox
+        acc_pt_size_lbl = Label('Point size:', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.pt_size_cbox = ComboBox([str(pt) for pt in range(11)], 45, 20, 'pt_size_cbox',
                                      'Select point size for soundings in the accuracy plot')
         self.pt_size_cbox.setCurrentIndex(1)
+        acc_pt_size_layout = BoxLayout([acc_pt_size_lbl, self.pt_size_cbox], 'h')
+        
+        acc_pt_alpha_lbl = Label('Opacity (%):', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        self.pt_alpha_acc_tb = LineEdit('100', 45, 20, 'pt_alpha_acc_tb', 'Set opacity for accuracy plot (0-100)')
+        self.pt_alpha_acc_tb.setValidator(QDoubleValidator(0, 100, 1))
+        acc_pt_alpha_layout = BoxLayout([acc_pt_alpha_lbl, self.pt_alpha_acc_tb], 'h', add_stretch=True)
+        
+        acc_groupbox_layout = BoxLayout([acc_pt_size_layout, acc_pt_alpha_layout], 'v')
+        acc_groupbox = GroupBox('Accuracy', acc_groupbox_layout, False, False, 'acc_groupbox')
+        
+        # Surface Coverage groupbox
+        cov_pt_size_lbl = Label('Point size:', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.pt_size_cov_cbox = ComboBox([str(pt) for pt in range(11)], 45, 20, 'pt_size_cov_cbox',
                                          'Select point size for soundings in the coverage plot (if shown)')
         self.pt_size_cov_cbox.setCurrentIndex(5)
-        pt_size_layout = BoxLayout([pt_size_lbl, self.pt_size_cbox, self.pt_size_cov_cbox], 'h')
-
-        pt_size_blank = Label('                ', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        pt_size_acc_cov_lbl = Label('Accuracy  Coverage', width=150, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        pt_size_lbl_layout = BoxLayout([pt_size_blank, pt_size_acc_cov_lbl], 'h')
-
-        # add point transparency/opacity slider (can help to visualize density of data)
-        pt_alpha_lbl = Label('Opacity (%):', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        self.pt_alpha_cbox = ComboBox([str(10 * pt) for pt in range(11)], 45, 20, 'pt_alpha_cbox', 'Select opacity')
-        self.pt_alpha_cbox.setCurrentIndex(self.pt_alpha_cbox.count() - 1)  # update opacity to greatest value
-        pt_alpha_layout = BoxLayout([pt_alpha_lbl, self.pt_alpha_cbox], 'h', add_stretch=True)
-
-        # set final point parameter layout
-        # pt_param_layout = BoxLayout([pt_size_layout, pt_alpha_layout], 'v')
-        pt_param_layout = BoxLayout([pt_size_lbl_layout, pt_size_layout, pt_alpha_layout], 'v')
-        pt_param_gb = GroupBox('Point style', pt_param_layout, False, False, 'pt_param_gb')
+        cov_pt_size_layout = BoxLayout([cov_pt_size_lbl, self.pt_size_cov_cbox], 'h')
+        
+        cov_pt_alpha_lbl = Label('Opacity (%):', width=60, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        self.pt_alpha_cov_tb = LineEdit('6', 45, 20, 'pt_alpha_cov_tb', 'Set opacity for coverage plot (0-100)')
+        self.pt_alpha_cov_tb.setValidator(QDoubleValidator(0, 100, 1))
+        cov_pt_alpha_layout = BoxLayout([cov_pt_alpha_lbl, self.pt_alpha_cov_tb], 'h', add_stretch=True)
+        
+        cov_groupbox_layout = BoxLayout([cov_pt_size_layout, cov_pt_alpha_layout], 'v')
+        cov_groupbox = GroupBox('Surface Coverage', cov_groupbox_layout, False, False, 'cov_groupbox')
+        
+        # set final point parameter layout with two groupboxes side by side
+        pt_param_layout = BoxLayout([acc_groupbox, cov_groupbox], 'h')
+        pt_param_gb = GroupBox('Point Styles', pt_param_layout, False, False, 'pt_param_gb')
 
         # add custom plot axis limits
-        max_beam_angle_lbl = Label('Max beam angle (deg):', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        max_beam_angle_lbl = Label('Max Angle (deg):', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.max_beam_angle_tb = LineEdit('', 50, 20, 'max_beam_angle_tb', 'Set the maximum plot angle (X axis)')
         self.max_beam_angle_tb.setValidator(QDoubleValidator(0, 90, 2))
         max_beam_angle_layout = BoxLayout([max_beam_angle_lbl, self.max_beam_angle_tb], 'h')
 
-        angle_spacing_lbl = Label('Angle spacing (deg):', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        angle_spacing_lbl = Label('Label (deg):', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.angle_spacing_tb = LineEdit('', 50, 20, 'angle_spacing_tb', 'Set the angle tick spacing')
         self.angle_spacing_tb.setValidator(QDoubleValidator(0, 90, 2))
         angle_spacing_layout = BoxLayout([angle_spacing_lbl, self.angle_spacing_tb], 'h')
+        
+        # Combine Max Angle and Label on the same line
+        angle_combined_layout = BoxLayout([max_beam_angle_layout, angle_spacing_layout], 'h', add_stretch=True)
 
-        max_bias_lbl = Label('Max bias (' + self.unit_mode + '):', width=110,
+        max_bias_lbl = Label('Max Bias ' + self.unit_mode + ':', width=110,
                              alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.max_bias_tb = LineEdit('', 50, 20, 'max_bias_tb', 'Set the maximum plot bias (Y axis)')
         self.max_bias_tb.setValidator(QDoubleValidator(0, 100, 2))
         max_bias_layout = BoxLayout([max_bias_lbl, self.max_bias_tb], 'h')
 
-        max_std_lbl = Label('Max st. dev. (' + self.unit_mode + '):', width=110,
+        max_std_lbl = Label('Max SDEV ' + self.unit_mode + ':', width=110,
                             alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.max_std_tb = LineEdit('', 50, 20, 'max_std_tb', 'Set the maximum plot standard deviation (Y axis)')
         self.max_std_tb.setValidator(QDoubleValidator(0, 100, 2))
         max_std_layout = BoxLayout([max_std_lbl, self.max_std_tb], 'h')
+        
+        # Combine Max Bias and Max STDEV on the same line
+        bias_std_combined_layout = BoxLayout([max_bias_layout, max_std_layout], 'h', add_stretch=True)
 
-        axis_margin_lbl = Label('Ref. plot margins (%)', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        axis_margin_lbl = Label('Plot Buffer (%)', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.axis_margin_tb = LineEdit('', 50, 20, 'axis_margin_tb', 'Set the reference plot axis margins (%)')
         self.axis_margin_tb.setValidator(QDoubleValidator(0, 100, 2))
         axis_margin_layout = BoxLayout([axis_margin_lbl, self.axis_margin_tb], 'h')
 
         # Add tide range parameter
-        tide_range_lbl = Label('Tide range (hrs)', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        self.tide_range_tb = LineEdit('12', 50, 20, 'tide_range_tb', 'Set the ± time range in hours for optimized tide plotting')
+        tide_range_lbl = Label('Tide Range (hrs)', width=110, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        self.tide_range_tb = LineEdit('12', 50, 20, 'tide_range_tb', 'Set the ± time range in hours for tide plotting')
         self.tide_range_tb.setValidator(QDoubleValidator(0.1, 72, 1))  # Allow 0.1 to 72 hours
         tide_range_layout = BoxLayout([tide_range_lbl, self.tide_range_tb], 'h')
+        
+        # Combine Plot Buffer and Tide Range on the same line
+        buffer_tide_combined_layout = BoxLayout([axis_margin_layout, tide_range_layout], 'h', add_stretch=True)
 
         # autoscale_lbl = Label('Autoscale')
 
         # plot_lim_layout = BoxLayout([max_beam_angle_layout, angle_spacing_layout, max_bias_layout, max_std_layout], 'v')
-        plot_lim_layout = BoxLayout([max_beam_angle_layout, angle_spacing_layout, max_bias_layout, max_std_layout,
-                                     axis_margin_layout, tide_range_layout], 'v')
+        plot_lim_layout = BoxLayout([angle_combined_layout, bias_std_combined_layout,
+                                     buffer_tide_combined_layout], 'v')
 
         self.plot_lim_gb = GroupBox('Use custom plot limits', plot_lim_layout, True, False, 'plot_lim_gb')
 

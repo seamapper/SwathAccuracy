@@ -114,7 +114,8 @@ def init_all_axes(self):
 def init_swath_ax(self):  # set initial swath parameters
 	self.pt_size = np.square(float(self.pt_size_cbox.currentText()))  # swath plot point size
 	self.pt_size_cov = np.square(float(self.pt_size_cov_cbox.currentText()))  # coverage plot point size
-	self.pt_alpha = np.divide(float(self.pt_alpha_cbox.currentText()), 100)
+	self.pt_alpha = np.divide(float(self.pt_alpha_acc_tb.text()), 100)  # accuracy plot opacity
+	self.pt_alpha_cov = np.divide(float(self.pt_alpha_cov_tb.text()), 100)  # coverage plot opacity
 
 	self.ax1 = self.swath_figure.add_subplot(211)
 	self.ax2 = self.swath_figure.add_subplot(212)
@@ -1546,7 +1547,7 @@ def plot_ref_surf(self):
 			# Plot crossline soundings on final surface tab
 			print(f"DEBUG: About to plot crossline coverage on final surface tab with {len(real_e_dec)} points")
 			self.surf_ax5.scatter(real_e_dec, real_n_dec,
-								 s=20, c='lightgray', marker='o', alpha=0.2, linewidths=0)
+								 s=self.pt_size_cov, c='lightgray', marker='o', alpha=self.pt_alpha_cov, linewidths=0)
 			print(f"DEBUG: Finished plotting crossline coverage on final surface tab")
 			# Plot tracklines on final surface tab
 			for f in self.xline_track.keys():
@@ -1849,7 +1850,7 @@ def plot_ref_surf(self):
 		real_n_dec = dec_data[1]
 
 		self.surf_ax5.scatter(real_e_dec, real_n_dec,
-							  s=20, c='lightgray', marker='o', alpha=0.2, linewidths=0)
+							  s=self.pt_size_cov, c='lightgray', marker='o', alpha=self.pt_alpha_cov, linewidths=0)
 		
 		for f in self.xline_track.keys():  # plot soundings on large final surface plot
 			self.surf_ax5.scatter(self.xline_track[f]['e'], self.xline_track[f]['n'],
@@ -1862,12 +1863,7 @@ def plot_tide(self, set_active_tab=False):
 		return
 
 	update_log(self, 'Plotting tide')
-	
-	# Check if optimized tide plotting is enabled
-	if hasattr(self, 'optimized_tide_plotting_chk') and self.optimized_tide_plotting_chk.isChecked():
-		plot_tide_optimized(self, set_active_tab)
-	else:
-		plot_tide_original(self, set_active_tab)
+	plot_tide_optimized(self, set_active_tab)
 
 
 def plot_tide_optimized(self, set_active_tab=False):
@@ -1945,9 +1941,9 @@ def plot_tide_optimized(self, set_active_tab=False):
 	
 	# Set title and labels
 	if plot_start and plot_end:
-		self.tide_ax.set_title(f'Tide Curve with Crossline Time Ranges (Optimized, ±{tide_range_hours}h)')
+		self.tide_ax.set_title(f'Tide Curve with Crossline Time Ranges (±{tide_range_hours}h)')
 	else:
-		self.tide_ax.set_title('Tide Curve with Crossline Time Ranges (Optimized)')
+		self.tide_ax.set_title('Tide Curve with Crossline Time Ranges')
 	self.tide_ax.set_xlabel('Time')
 	self.tide_ax.set_ylabel('Tide Amplitude (m)')
 	
@@ -1976,60 +1972,7 @@ def plot_tide_optimized(self, set_active_tab=False):
 	self.tide_canvas.show()
 	
 	plot_time = process_time() - start_time
-	update_log(self, f'Optimized tide plotting completed in {plot_time:.2f} seconds')
-	
-	if set_active_tab:
-		self.plot_tabs.setCurrentIndex(3)  # Set to tide tab
-
-
-def plot_tide_original(self, set_active_tab=False):
-	"""Original tide plotting - plots individual ping tide values (slower)"""
-	from time import process_time
-	start_time = process_time()
-	
-	self.tide_ax.clear()  # Clear the axes before plotting
-	
-	self.tide_ax.plot(self.tide['time_obj'], self.tide['amplitude'],
-					  color='black', marker='o', markersize=self.pt_size/10, alpha=self.pt_alpha)
-	
-	# Add the missing functionality from original plot_tide() - plot applied tide data
-	if all([k in self.xline.keys() for k in ['tide_applied', 'datetime']]):
-		# get unique ping times by finding where applied tide diff != 0, rather than resorting
-		testing = set(self.xline['datetime'])
-		ping_idx = [self.xline['datetime'].index(t) for t in set(self.xline['datetime'])]  # get unique ping times
-		ping_time_set = [self.xline['datetime'][i] for i in ping_idx]
-		tide_ping_set = [self.xline['tide_applied'][i] for i in ping_idx]
-		sort_idx = np.argsort(ping_time_set)
-		self.tide_ax.plot(np.asarray(ping_time_set)[sort_idx], np.asarray(tide_ping_set)[sort_idx], 'ro',
-						  markersize=self.pt_size / 10)
-	
-	# Set title and labels
-	self.tide_ax.set_title('Tide Applied to Accuracy Crosslines (Original)')
-	self.tide_ax.set_xlabel('Time')
-	self.tide_ax.set_ylabel('Tide Amplitude (m)')
-	
-	# Format x-axis to show dates properly
-	self.tide_ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
-	self.tide_ax.xaxis.set_major_locator(mdates.HourLocator(interval=6))
-	self.tide_figure.autofmt_xdate()
-	
-	# Force autoscale
-	self.tide_ax.relim()
-	self.tide_ax.autoscale_view()
-	
-	# Always draw the canvas
-	self.tide_canvas.draw()
-	
-	# Force a repaint
-	self.tide_canvas.repaint()
-	
-	# Force the canvas to update
-	self.tide_canvas.update()
-	
-	self.tide_canvas.show()
-	
-	plot_time = process_time() - start_time
-	update_log(self, f'Original tide plotting completed in {plot_time:.2f} seconds')
+	update_log(self, f'Tide plotting completed in {plot_time:.2f} seconds')
 	
 	if set_active_tab:
 		self.plot_tabs.setCurrentIndex(3)  # Set to tide tab
@@ -3615,9 +3558,10 @@ def refresh_plot(self, refresh_list=['ref', 'acc', 'tide'], sender=None, set_act
 	
 	self.pt_size = np.square(float(self.pt_size_cbox.currentText()))  # swath plot point size
 	self.pt_size_cov = np.square(float(self.pt_size_cov_cbox.currentText()))  # coverage plot point size
-	self.pt_alpha = np.divide(float(self.pt_alpha_cbox.currentText()), 100)
-	update_log(self, f'Plot settings - Point size: {self.pt_size}, Coverage size: {self.pt_size_cov}, Alpha: {self.pt_alpha:.2f}')
-	print('got pt_size, pt_size_cov, and pt_alpha = ', self.pt_size, self.pt_size_cov, self.pt_alpha)
+	self.pt_alpha = np.divide(float(self.pt_alpha_acc_tb.text()), 100)  # accuracy plot opacity
+	self.pt_alpha_cov = np.divide(float(self.pt_alpha_cov_tb.text()), 100)  # coverage plot opacity
+	update_log(self, f'Plot settings - Point size: {self.pt_size}, Coverage size: {self.pt_size_cov}, Alpha (acc): {self.pt_alpha:.2f}, Alpha (cov): {self.pt_alpha_cov:.2f}')
+	print('got pt_size, pt_size_cov, pt_alpha (acc), and pt_alpha_cov = ', self.pt_size, self.pt_size_cov, self.pt_alpha, self.pt_alpha_cov)
 
 	try:
 		print('in refresh_plot, calling update_axes')
@@ -4916,7 +4860,8 @@ def save_session(self):
 				# Point style
 				'point_size': self.pt_size_cbox.currentText(),
 				'point_size_coverage': self.pt_size_cov_cbox.currentText(),
-				'point_opacity': self.pt_alpha_cbox.currentText(),
+				'point_opacity_accuracy': self.pt_alpha_acc_tb.text(),
+				'point_opacity_coverage': self.pt_alpha_cov_tb.text(),
 				
 				# Plot limits
 				'custom_plot_limits': self.plot_lim_gb.isChecked(),
@@ -5095,7 +5040,15 @@ def load_session(self):
 		# Point style
 		self.pt_size_cbox.setCurrentText(plot_settings.get('point_size', '1'))
 		self.pt_size_cov_cbox.setCurrentText(plot_settings.get('point_size_coverage', '5'))
-		self.pt_alpha_cbox.setCurrentText(plot_settings.get('point_opacity', '100'))
+		# Handle both old and new opacity settings for backward compatibility
+		if 'point_opacity_accuracy' in plot_settings:
+			self.pt_alpha_acc_tb.setText(plot_settings.get('point_opacity_accuracy', '100'))
+			self.pt_alpha_cov_tb.setText(plot_settings.get('point_opacity_coverage', '6'))
+		else:
+			# Old format: single opacity value applies to both
+			old_opacity = plot_settings.get('point_opacity', '100')
+			self.pt_alpha_acc_tb.setText(old_opacity)
+			self.pt_alpha_cov_tb.setText(old_opacity)
 		
 		# Plot limits
 		self.plot_lim_gb.setChecked(plot_settings.get('custom_plot_limits', False))
@@ -5223,7 +5176,8 @@ def save_current_plot_settings(self):
 			# Point style settings
 			'point_size': self.pt_size_cbox.currentText(),
 			'point_size_coverage': self.pt_size_cov_cbox.currentText(),
-			'point_opacity': self.pt_alpha_cbox.currentText(),
+			'point_opacity_accuracy': self.pt_alpha_acc_tb.text(),
+			'point_opacity_coverage': self.pt_alpha_cov_tb.text(),
 			
 			# Plot limits settings
 			'custom_plot_limits': self.plot_lim_gb.isChecked(),
@@ -5248,7 +5202,6 @@ def save_current_plot_settings(self):
 			'show_order_1b': self.show_order_1b_chk.isChecked(),
 			'show_order_2': self.show_order_2_chk.isChecked(),
 			'show_order_3': self.show_order_3_chk.isChecked(),
-			'optimized_tide_plotting': self.optimized_tide_plotting_chk.isChecked(),
 			
 			# Flatten swath settings
 			'flatten_mean_enabled': self.flatten_mean_gb.isChecked(),
@@ -5322,10 +5275,18 @@ def load_last_plot_settings(self):
 		if pt_size_cov_idx >= 0:
 			self.pt_size_cov_cbox.setCurrentIndex(pt_size_cov_idx)
 		
-		pt_alpha = plot_settings.get('point_opacity', '100')
-		pt_alpha_idx = self.pt_alpha_cbox.findText(pt_alpha)
-		if pt_alpha_idx >= 0:
-			self.pt_alpha_cbox.setCurrentIndex(pt_alpha_idx)
+		# Handle both old and new opacity settings for backward compatibility
+		if 'point_opacity_accuracy' in plot_settings:
+			pt_alpha_acc = plot_settings.get('point_opacity_accuracy', '100')
+			self.pt_alpha_acc_tb.setText(pt_alpha_acc)
+			
+			pt_alpha_cov = plot_settings.get('point_opacity_coverage', '6')
+			self.pt_alpha_cov_tb.setText(pt_alpha_cov)
+		else:
+			# Old format: single opacity value applies to both
+			pt_alpha = plot_settings.get('point_opacity', '100')
+			self.pt_alpha_acc_tb.setText(pt_alpha)
+			self.pt_alpha_cov_tb.setText(pt_alpha)
 		
 		# Apply plot limits settings
 		self.plot_lim_gb.setChecked(plot_settings.get('custom_plot_limits', False))
@@ -5350,7 +5311,6 @@ def load_last_plot_settings(self):
 		self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
 		self.show_order_2_chk.setChecked(plot_settings.get('show_order_2', False))
 		self.show_order_3_chk.setChecked(plot_settings.get('show_order_3', False))
-		self.optimized_tide_plotting_chk.setChecked(plot_settings.get('optimized_tide_plotting', True))
 		
 		# Apply flatten swath settings
 		self.flatten_mean_gb.setChecked(plot_settings.get('flatten_mean_enabled', False))
@@ -5393,7 +5353,8 @@ def load_default_plot_settings(self):
 		# Point style defaults
 		self.pt_size_cbox.setCurrentIndex(1)  # Point size 1
 		self.pt_size_cov_cbox.setCurrentIndex(5)  # Point size 5 for coverage
-		self.pt_alpha_cbox.setCurrentIndex(self.pt_alpha_cbox.count() - 1)  # 100% opacity
+		self.pt_alpha_acc_tb.setText('100')  # default opacity for accuracy
+		self.pt_alpha_cov_tb.setText('6')  # default opacity for coverage
 		
 		# Plot limits defaults
 		self.plot_lim_gb.setChecked(False)
