@@ -67,7 +67,8 @@ License:
 # __version__ = "2025.2"  # changes in data management, gui changes, and swath pkl file management
 # __version__ = "2025.3"  # changes in gui, added file management, and added export all to geotiff button
 # __version__ = "2025.5"  # changes in gui, added file management, and added export all to geotiff button
-__version__ = "2025.6"  # changes in gui, added point size and opacity for accuracy and coverage plots
+# __version__ = "2025.6"  # changes in gui, added point size and opacity for accuracy and coverage plots
+__version__ = "2025.7"  # fixed an issue with the save_all_plots function
 
 
 import sys
@@ -1699,7 +1700,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # If we get here, either all fields are filled or user chose to continue
         # Call the original save_all_plots function
-        from multibeam_tools.libs.swath_accuracy_lib import save_all_plots
+        from libs.swath_accuracy_lib import save_all_plots
         save_all_plots(self)
 
 
