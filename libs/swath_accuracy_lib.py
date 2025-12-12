@@ -2085,7 +2085,7 @@ def parse_crosslines(self):
 
 			if ftype == 'all':
 				# parse IPSTART73, RRA78, POS80, RTP82, XYZ88
-				# data_new[f] = multibeam_tools.libs.readEM.parseEMfile(fnames_new[f],
+				# data_new[f] = libs.readEM.parseEMfile(fnames_new[f],
 				#                                                       parse_list=[73, 78, 80, 82, 88],
 				#                                                       print_updates=False)
 
