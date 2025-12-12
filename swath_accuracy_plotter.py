@@ -68,7 +68,8 @@ License:
 # __version__ = "2025.3"  # changes in gui, added file management, and added export all to geotiff button
 # __version__ = "2025.5"  # changes in gui, added file management, and added export all to geotiff button
 # __version__ = "2025.6"  # changes in gui, added point size and opacity for accuracy and coverage plots
-__version__ = "2025.7"  # fixed an issue with the save_all_plots function
+# __version__ = "2025.7"  # fixed an issue with the save_all_plots function
+__version__ = "2025.8"  # fixed another issue with the save_all_plots function
 
 
 import sys
