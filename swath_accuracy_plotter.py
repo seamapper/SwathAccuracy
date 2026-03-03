@@ -69,8 +69,8 @@ License:
 # __version__ = "2025.5"  # changes in gui, added file management, and added export all to geotiff button
 # __version__ = "2025.6"  # changes in gui, added point size and opacity for accuracy and coverage plots
 # __version__ = "2025.7"  # fixed an issue with the save_all_plots function
-__version__ = "2025.8"  # fixed another issue with the save_all_plots function
-
+# __version__ = "2025.8"  # fixed another issue with the save_all_plots function
+__version__ = "2026.01"  # added dark mode 
 
 import sys
 import os
@@ -1710,10 +1710,39 @@ class NewPopup(QtWidgets.QWidget): # new class for additional plots
         QtWidgets.QWidget.__init__(self)
         
         
+def _apply_dark_fusion_style(app):
+    """Apply Fusion style and dark palette so the GUI looks consistent in dark mode on any OS theme."""
+    app.setStyle("Fusion")
+    palette = QtGui.QPalette()
+    # Background and base
+    palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor(53, 53, 53))
+    palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor(240, 240, 240))
+    palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor(35, 35, 35))
+    palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor(53, 53, 53))
+    # Buttons and inputs
+    palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor(53, 53, 53))
+    palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor(240, 240, 240))
+    palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor(240, 240, 240))
+    # Selection and links
+    palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(42, 130, 218))
+    palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor(255, 255, 255))
+    palette.setColor(QtGui.QPalette.ColorRole.Link, QtGui.QColor(42, 130, 218))
+    # Disabled
+    palette.setColor(QtGui.QPalette.ColorGroup.Disabled, QtGui.QPalette.ColorRole.WindowText, QtGui.QColor(127, 127, 127))
+    palette.setColor(QtGui.QPalette.ColorGroup.Disabled, QtGui.QPalette.ColorRole.Text, QtGui.QColor(127, 127, 127))
+    palette.setColor(QtGui.QPalette.ColorGroup.Disabled, QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor(127, 127, 127))
+    palette.setColor(QtGui.QPalette.ColorRole.BrightText, QtGui.QColor(255, 255, 255))
+    # Tooltips
+    palette.setColor(QtGui.QPalette.ColorRole.ToolTipBase, QtGui.QColor(45, 45, 45))
+    palette.setColor(QtGui.QPalette.ColorRole.ToolTipText, QtGui.QColor(240, 240, 240))
+    app.setPalette(palette)
+
+
 if __name__ == '__main__':
     print("Starting Swath Accuracy Plotter...")
     print("Creating QApplication...")
     app = QtWidgets.QApplication(sys.argv)
+    _apply_dark_fusion_style(app)
     print("Creating MainWindow...")
     main = MainWindow()
     main.resize(1700, 1050)  # Set initial size to 1700x1050 pixels

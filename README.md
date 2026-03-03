@@ -27,6 +27,7 @@ The Swath Accuracy Plotter is a comprehensive toolkit for assessing multibeam ec
 - **Export Capabilities**: Export plots as PNG/JPG/TIF and reference surfaces as GeoTIFF
 - **Unique Line Colors**: Color-code points by crossline file for easy identification
 - **IHO Standards**: Visualize Special Order, Order 1a, 1b, 2, and 3 accuracy limits
+- **Dark Mode GUI**: Fusion style with dark palette so the interface looks consistent on both light and dark system themes
 
 ## Requirements
 
@@ -54,10 +55,29 @@ pip install PyQt6 matplotlib numpy scipy pyproj utm rasterio
 
 ## Usage
 
-Run the application:
+### Run from source
+
 ```bash
 python swath_accuracy_plotter.py
 ```
+
+(Use your project’s Python/venv if you use one, e.g. `path\to\.venv\Scripts\python.exe swath_accuracy_plotter.py`.)
+
+### Build a standalone executable
+
+The executable name is **Swath_Accuracy_Plotter_v** plus the version from the code (e.g. `Swath_Accuracy_Plotter_v2026.01.exe`).
+
+- **Option 1 – Batch file (Windows)**  
+  Double‑click **`build_exe.bat`** in the project root. It uses the Python in `..\.venv\Scripts\python.exe`; edit the bat file if your venv is elsewhere.
+
+- **Option 2 – Python script**  
+  From the project root:
+  ```bash
+  python build_exe.py
+  ```
+  (Use the same Python that has PyInstaller and the project dependencies installed.)
+
+The built exe is written to the **`dist`** folder. The build uses PyInstaller with `--onefile`, `--noconsole`, and the app icon from `media/mac.ico` if present.
 
 ### Basic Workflow
 
@@ -83,7 +103,9 @@ python swath_accuracy_plotter.py
 ```
 SwathAccuracy/
 ├── swath_accuracy_plotter.py  # Main application entry point
-├── libs/                       # Core library modules
+├── build_exe.py               # Build script: reads __version__, runs PyInstaller
+├── build_exe.bat              # Windows batch launcher for build_exe.py
+├── libs/                      # Core library modules
 │   ├── swath_accuracy_lib.py  # Main plotting and analysis functions
 │   ├── file_fun.py            # File I/O operations
 │   ├── gui_widgets.py         # Custom GUI widgets
@@ -91,16 +113,20 @@ SwathAccuracy/
 │   ├── readEM.py              # EM file reading
 │   ├── kmall.py               # KMALL file support
 │   └── swath_fun.py           # Swath utility functions
-├── media/                      # Application media files
-│   └── CCOM_MAC.png           # Logo
+├── media/                     # Application media files
+│   ├── CCOM_MAC.png           # Logo
+│   └── mac.ico                # Application icon (for built exe)
 ├── LICENSE                     # BSD 3-Clause License
 └── README.md                   # This file
 ```
 
 ## Version History
 
-- **2025.6**: Added point size and opacity controls for accuracy and coverage plots, unique line colors feature
-- **2025.5**: Added file management and export all to GeoTIFF functionality
+- **2026.01**: Dark mode GUI (Fusion style + dark palette); versioned exe build (build_exe.py / build_exe.bat)
+- **2025.8**: Fix for save_all_plots import
+- **2025.7**: Fix for save_all_plots function
+- **2025.6**: Point size and opacity controls for accuracy and coverage plots, unique line colors feature
+- **2025.5**: File management and export all to GeoTIFF functionality
 - **2025.3**: GUI improvements and GeoTIFF export button
 - **2025.2**: Data management improvements and GUI changes
 - **2025.1**: Major rewrite with shaded relief, special order, and IHO order 1a-3 support
@@ -125,6 +151,7 @@ Developed at the Center for Coastal and Ocean Mapping / Joint Hydrographic Cente
 ## Support
 
 For issues, questions, or contributions, please use the GitHub Issues page.
+
 
 
 
