@@ -801,23 +801,21 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # TAB 1: PLOT OPTIONS
         # add text boxes for system, ship, cruise
-        model_tb_lbl = Label('Model:', width=100, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        model_tb_lbl = Label('Model:', width=100, alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
         self.model_cbox = ComboBox(self.model_list, 100, 20, 'model_cbox', 'Select the model')
         self.show_model_chk = CheckBox('', True, 'show_model_chk', 'Show model in plot title')
-        model_info_layout_left = BoxLayout([model_tb_lbl, self.model_cbox], 'h', alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        model_info_layout = BoxLayout([model_info_layout_left, self.show_model_chk], 'h', alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        model_info_layout_left = BoxLayout([model_tb_lbl, self.model_cbox], 'h', alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
+        model_info_layout = BoxLayout([model_info_layout_left, self.show_model_chk], 'h', alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
 
-        ship_tb_lbl = Label('Ship Name:', width=100, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        ship_tb_lbl = Label('Ship Name:', width=100, alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
         self.ship_tb = LineEdit('R/V Unsinkable II', 100, 20, 'ship_tb', 'Enter the ship name')
         self.show_ship_chk = CheckBox('', True, 'show_ship_chk', 'Show ship name in plot title')
-        ship_info_layout_left = BoxLayout([ship_tb_lbl, self.ship_tb], 'h', alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        ship_info_layout = BoxLayout([ship_info_layout_left, self.show_ship_chk], 'h', alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        ship_info_layout = BoxLayout([ship_tb_lbl, self.ship_tb, self.show_ship_chk], 'h', alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
 
-        cruise_tb_lbl = Label('Description:', width=100, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        cruise_tb_lbl = Label('Description:', width=100, alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
         self.cruise_tb = LineEdit('A 3-hour tour', 100, 20, 'cruise_tb', 'Enter the cruise name')
         self.show_cruise_chk = CheckBox('', True, 'show_cruise_chk', 'Show cruise in plot title')
-        cruise_info_layout_left = BoxLayout([cruise_tb_lbl, self.cruise_tb], 'h', alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        cruise_info_layout = BoxLayout([cruise_info_layout_left, self.show_cruise_chk], 'h', alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        cruise_info_layout = BoxLayout([cruise_tb_lbl, self.cruise_tb, self.show_cruise_chk], 'h', alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
 
         self.custom_info_gb = GroupBox('Use custom system information',
                                        BoxLayout([model_info_layout, ship_info_layout, cruise_info_layout], 'v'),
@@ -1070,9 +1068,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                      'of the reference depth grid after any averaging using the window size selected)')
         self.max_slope_tb.setValidator(QDoubleValidator(0, np.inf, 2))
 
-        slope_win_layout = BoxLayout([slope_win_lbl, self.slope_win_cbox], 'h', add_stretch=True)
-        slope_max_layout = BoxLayout([max_slope_lbl, self.max_slope_tb], 'h', add_stretch=True)
-        slope_layout = BoxLayout([slope_win_layout, slope_max_layout], 'v')
+        slope_layout = BoxLayout([slope_win_lbl, self.slope_win_cbox, max_slope_lbl, self.max_slope_tb], 'h')
         self.slope_gb = GroupBox('Slope', slope_layout, True, False, 'slope_win_gb')
 
         # ref surf sounding density filtering
@@ -1745,8 +1741,8 @@ if __name__ == '__main__':
     _apply_dark_fusion_style(app)
     print("Creating MainWindow...")
     main = MainWindow()
-    main.resize(1700, 1050)  # Set initial size to 1700x1050 pixels
-    main.setFixedSize(1700, 1050)  # Prevent window resizing
+    main.resize(1700, 1100)  # Set initial size to 1700x1100 pixels
+    main.setFixedSize(1700, 1100)  # Prevent window resizing
     print("Showing MainWindow...")
     main.show()
     print("Entering event loop...")

@@ -2631,11 +2631,26 @@ def convert_track_utm(self):
 def calc_dz_from_ref_interp(self):
 	# calculate the difference of each sounding from the reference grid (interpolated onto sounding X, Y position)
 	update_log(self, 'Calculating ref grid depths at crossline sounding positions')
+
+	# Some workflows can leave xline without converted UTM keys ('e'/'n').
+	# Fall back to parsed coordinate keys instead of hard-failing.
+	e_key = next((k for k in ['e', 'x', 'ping_e'] if k in self.xline), None)
+	n_key = next((k for k in ['n', 'y', 'ping_n'] if k in self.xline), None)
+	if e_key is None or n_key is None:
+		update_log(self, 'WARNING: Missing crossline coordinate keys for interpolation (expected e/n, x/y, or ping_e/ping_n)', font_color="red")
+		return
+
+	xline_e = np.asarray(self.xline[e_key])
+	xline_n = np.asarray(self.xline[n_key])
+	if xline_e.size == 0 or xline_n.size == 0 or xline_e.size != xline_n.size:
+		update_log(self, f'WARNING: Invalid crossline coordinate arrays for interpolation (e:{xline_e.size}, n:{xline_n.size})', font_color="red")
+		return
+
 	print('N ref_surf nodes e =', len(self.ref['e']), 'with first ten =', self.ref['e'][0:10])
 	print('N ref_surf nodes n =', len(self.ref['n']), 'with first ten =', self.ref['n'][0:10])
 	print('N ref_surf nodes z =', len(self.ref['z']), 'with first ten =', self.ref['z'][0:10])
-	print('N xline soundings e =', len(self.xline['e']), 'with first ten =', self.xline['e'][0:10])
-	print('N xline soundings n =', len(self.xline['n']), 'with first ten =', self.xline['n'][0:10])
+	print('N xline soundings e =', len(xline_e), 'with first ten =', xline_e[0:10])
+	print('N xline soundings n =', len(xline_n), 'with first ten =', xline_n[0:10])
 	print('N xline soundings z =', len(self.xline['z']), 'with first ten =', self.xline['z'][0:10])
 	print('N xline soundings z_final =', len(self.xline['z_final']), 'with first ten =', self.xline['z_final'][0:10])
 
@@ -2664,9 +2679,9 @@ def calc_dz_from_ref_interp(self):
 
 	if self.xline:
 		print('number of INFs in e_final, n_final, z_final, e_xline, n_xline =',
-			  [np.sum(np.isinf(thing)) for thing in [e_ref, n_ref, z_ref, self.xline['e'], self.xline['n']]])
+			  [np.sum(np.isinf(thing)) for thing in [e_ref, n_ref, z_ref, xline_e, xline_n]])
 		print('number of NANs in e_final, n_final, z_final, e_xline, n_xline =',
-			  [np.sum(np.isnan(thing)) for thing in [e_ref, n_ref, z_ref, self.xline['e'], self.xline['n']]])
+			  [np.sum(np.isnan(thing)) for thing in [e_ref, n_ref, z_ref, xline_e, xline_n]])
 	else:
 		print('number of INFs in e_final, n_final, z_final =',
 			  [np.sum(np.isinf(thing)) for thing in [e_ref, n_ref, z_ref]])
@@ -2682,7 +2697,7 @@ def calc_dz_from_ref_interp(self):
 	print('n_ref =', n_ref)
 	print('z_ref =', z_ref)
 
-	z_ref_interp = griddata((self.ref['e'], self.ref['n']), self.ref['z'], (self.xline['e'], self.xline['n']), method='linear')
+	z_ref_interp = griddata((self.ref['e'], self.ref['n']), self.ref['z'], (xline_e, xline_n), method='linear')
 
 	print('made z_ref_interp')
 
@@ -2691,7 +2706,7 @@ def calc_dz_from_ref_interp(self):
 	# but no longer works on POLLACK
 	# z_ref_interp_mask = griddata((e_ref, n_ref), z_ref, (self.xline['e'], self.xline['n']), method='nearest')
 	z_ref_interp_mask = griddata((e_ref_full.flatten(), n_ref_full.flatten()), z_ref,
-								 (self.xline['e'], self.xline['n']), method='nearest')
+								 (xline_e, xline_n), method='nearest')
 
 	# goal is to identify xline soundings over empty/nan ref grid cells
 	# z_ref_interp_mask = griddata((self.ref['e'], self.ref['n']), self.ref['z'], (self.xline['e'], self.xline['n']), method='nearest')
