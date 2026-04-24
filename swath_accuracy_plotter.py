@@ -60,17 +60,8 @@ License:
 
 ===============================================================================
 """
-# __version__ = "20240217"  # testing Qimera ASCII import
-# __version__ = "0.1.2"  # new version with position time series duplicate filtering per IB Nuyina EM712 example
-# __version__ = "0.1.3"  # added EM2042 model and update pyproj 3.6.1
-# __version__ = "2025.1"  # rewrite with Cursor AI, added shaded relief, special order, and order 1a-3
-# __version__ = "2025.2"  # changes in data management, gui changes, and swath pkl file management
-# __version__ = "2025.3"  # changes in gui, added file management, and added export all to geotiff button
-# __version__ = "2025.5"  # changes in gui, added file management, and added export all to geotiff button
-# __version__ = "2025.6"  # changes in gui, added point size and opacity for accuracy and coverage plots
-# __version__ = "2025.7"  # fixed an issue with the save_all_plots function
-# __version__ = "2025.8"  # fixed another issue with the save_all_plots function
-__version__ = "2026.01"  # added dark mode 
+
+__version__ = "2026.02"
 
 import sys
 import os
@@ -193,6 +184,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.save_plot_settings_btn.clicked.connect(lambda: save_current_plot_settings(self))
         self.load_last_plot_settings_btn.clicked.connect(lambda: load_last_plot_settings(self))
         self.default_plot_settings_btn.clicked.connect(lambda: load_default_plot_settings(self))
+        self.select_survey_orders_btn.clicked.connect(self.open_survey_orders_dialog)
         
 
         
@@ -258,6 +250,7 @@ class MainWindow(QtWidgets.QMainWindow):
                        self.show_model_chk,
                        self.show_ship_chk,
                        self.show_cruise_chk,
+                       self.show_accuracy_legend_chk,
                        self.show_shaded_relief_chk,
                        self.show_special_order_chk,
                        self.show_order_1a_chk,
@@ -496,25 +489,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_list = FileList()  # add file list with extended selection and icon size = (0,0) to avoid indent
         self.file_list.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
         self.file_list.setMaximumWidth(350)  # Limit left panel width
-        # file_layout = BoxLayout([self.file_list, file_btn_layout], 'h')
-        # Compose a vertical layout for buttons and CCOM_MAC logo
-        file_btn_and_logo_layout = BoxLayout([file_btn_layout], 'v')
-        ccom_mac_logo_path = os.path.join(self.media_path, 'CCOM_MAC.png')
-        logo_row = QtWidgets.QHBoxLayout()
-        # Add CCOM_MAC logo
-        if os.path.exists(ccom_mac_logo_path):
-            logo_label = QtWidgets.QLabel()
-            logo_pixmap = QtGui.QPixmap(ccom_mac_logo_path)
-            logo_pixmap = logo_pixmap.scaled(150, 75, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            logo_label.setPixmap(logo_pixmap)
-            logo_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
-            logo_row.addWidget(logo_label)
-        else:
-            print(f"Warning: Logo file not found at {ccom_mac_logo_path}")
-        # Add the logo row to the vertical layout, right-aligned
-        file_btn_and_logo_layout.addLayout(logo_row)
-        # Now use this vertical layout in the Sources group box
-        file_gb = GroupBox('Sources', BoxLayout([self.file_list, file_btn_and_logo_layout], 'h'), False, False, 'file_gb')
+        file_gb = GroupBox('Sources', BoxLayout([self.file_list, file_btn_layout], 'h'), False, False, 'file_gb')
         file_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
 
         # add activity log widget
@@ -779,6 +754,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.update_ref_plots_chk.setChecked(True)
             self.show_xline_cov_chk.setChecked(True)
             self.show_u_plot_chk.setChecked(True)
+            self.show_accuracy_legend_chk.setChecked(True)
             self.show_shaded_relief_chk.setChecked(True)
             self.show_special_order_chk.setChecked(False)
             self.show_order_1a_chk.setChecked(False)
@@ -984,6 +960,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.show_u_plot_chk = CheckBox('Show uncertainty plot if parsed', True, 'show_u_plot_chk',
                                         'Plot the reference surface uncertainty if parsed from .xyz file (zeros if not'
                                         'parsed.\nThis will replace the subplot for the "final" masked surface.')
+        self.show_accuracy_legend_chk = CheckBox('Show Accuracy Legend', True, 'show_accuracy_legend_chk',
+                                                 'Show legends in the upper-right corners of both Accuracy tab plots.')
 
         self.show_shaded_relief_chk = CheckBox('Show shaded relief', True, 'show_shaded_relief_chk',
                                                'Add shaded relief visualization to reference surface plots using '
@@ -1001,18 +979,40 @@ class MainWindow(QtWidgets.QMainWindow):
         self.show_order_3_chk = CheckBox('Show Order 3 (±2.0+0.05×depth m)', False, 'show_order_3_chk',
                                          'Show Order 3 accuracy limits (±2.0+0.05×depth m) on accuracy plot')
 
+        # Bathymetric order controls dialog
+        self.survey_orders_dialog = QtWidgets.QDialog(self)
+        self.survey_orders_dialog.setWindowTitle('Select Survey Orders')
+        self.survey_orders_dialog.setModal(True)
+        survey_orders_layout = BoxLayout([self.show_special_order_chk,
+                                          self.show_order_1a_chk,
+                                          self.show_order_1b_chk,
+                                          self.show_order_2_chk,
+                                          self.show_order_3_chk], 'v')
+        close_survey_orders_btn = PushButton('Close', 70, 25, 'close_survey_orders_btn',
+                                             'Close survey order selection')
+        close_survey_orders_btn.clicked.connect(self.survey_orders_dialog.accept)
+        survey_orders_dialog_layout = BoxLayout([survey_orders_layout, close_survey_orders_btn], 'v')
+        self.survey_orders_dialog.setLayout(survey_orders_dialog_layout)
+
+        # IHO classification controls (open dialog with survey order checkboxes)
+        iho_classifications_lbl = Label('Configure survey order lines', width=170,
+                                        alignment=(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter))
+        self.iho_classifications_gb = GroupBox('IHO Classifications',
+                                               BoxLayout([iho_classifications_lbl], 'v'),
+                                               False, False, 'iho_classifications_gb')
+        self.select_survey_orders_btn = PushButton('Select Survey Orders', 150, 25, 'select_survey_orders_btn',
+                                                   'Open survey order selection dialog')
+        iho_controls_layout = BoxLayout([self.iho_classifications_gb, self.select_survey_orders_btn], 'h')
+
         toggle_chk_layout = BoxLayout([self.show_acc_proc_text_chk,
                                        self.show_ref_proc_text_chk,
                                        self.grid_lines_toggle_chk,
                                        self.update_ref_plots_chk,
                                        self.show_xline_cov_chk,
                                        self.show_u_plot_chk,
+                                       self.show_accuracy_legend_chk,
                                        self.show_shaded_relief_chk,
-                                       self.show_special_order_chk,
-                                       self.show_order_1a_chk,
-                                       self.show_order_1b_chk,
-                                       self.show_order_2_chk,
-                                       self.show_order_3_chk], 'v')  # self.IHO_lines_toggle_chk], 'v')
+                                       iho_controls_layout], 'v')  # self.IHO_lines_toggle_chk], 'v')
 
         toggle_gb = QtWidgets.QGroupBox('Plot options')
         toggle_gb.setLayout(toggle_chk_layout)
@@ -1669,6 +1669,11 @@ class MainWindow(QtWidgets.QMainWindow):
             if hasattr(self, 'slope_tooltip'):
                 self.slope_tooltip.set_visible(False)
                 self.slope_final_canvas.draw_idle()
+
+    def open_survey_orders_dialog(self):
+        """Open the survey order selection dialog."""
+        if hasattr(self, 'survey_orders_dialog'):
+            self.survey_orders_dialog.exec()
 
     def handle_save_all_plots(self):
         """Handle save all plots with validation for ship name and description"""

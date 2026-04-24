@@ -3242,7 +3242,7 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 	self.N_plotted = len(real_beam_angle_dec)
 
 	# plot standard deviation as %WD versus beam angle
-	self.ax1.plot(beam_bin_centers, beam_bin_dz_wd_std, '-', linewidth=self.lwidth, color='b')  # bin mean + st. dev.
+	self.ax1.plot(beam_bin_centers, beam_bin_dz_wd_std, '-', linewidth=self.lwidth, color='b', label='Std. Dev.')  # bin mean + st. dev.
 
 	# plot mean and std trend lines over decimated raw soundings (as %WD)
 	if self.flatten_mean_gb.isChecked():  # flatten the mean bias curve
@@ -3267,17 +3267,18 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 						file_dz = [real_dz_wd_bin_zero_mean_plot[i] for i in file_indices]
 						self.ax2.scatter(file_angles, file_dz,
 										 marker='o', color=fname_to_color[fname], s=self.pt_size, alpha=self.pt_alpha)
+				self.ax2.scatter([], [], marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha, label='Soundings')
 			else:
 				self.ax2.scatter(real_beam_angle_dec, real_dz_wd_bin_zero_mean_plot,
-								 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
+								 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha, label='Soundings')
 
 			self.ax2.plot(beam_bin_centers, np.asarray(self.beam_bin_dz_wd_zero), '-',
-						  linewidth=self.lwidth, color='r')  # beamwise bin mean diff
+						  linewidth=self.lwidth, color='r', label='Mean Bias')  # beamwise bin mean diff
 
 			self.ax2.plot(beam_bin_centers, self.beam_bin_dz_wd_std, '-',
-						  linewidth=self.lwidth, color='b')  # beamwise bin mean + st. dev.
+						  linewidth=self.lwidth, color='b', label='+1 Sigma')  # beamwise bin mean + st. dev.
 			self.ax2.plot(beam_bin_centers, np.multiply(-1, self.beam_bin_dz_wd_std), '-',
-						  linewidth=self.lwidth, color='b')  # beamwise bin mean - st. dev.
+						  linewidth=self.lwidth, color='b', label='-1 Sigma')  # beamwise bin mean - st. dev.
 
 			print('survived zero mean steps...')
 
@@ -3299,17 +3300,18 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 						file_dz = [real_dz_wd_bin_flat_mean_plot[i] for i in file_indices]
 						self.ax2.scatter(file_angles, file_dz,
 										 marker='o', color=fname_to_color[fname], s=self.pt_size, alpha=self.pt_alpha)
+				self.ax2.scatter([], [], marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha, label='Soundings')
 			else:
 				self.ax2.scatter(real_beam_angle_dec, real_dz_wd_bin_flat_mean_plot,
-								 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
+								 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha, label='Soundings')
 
 			self.ax2.plot(beam_bin_centers, np.add(np.asarray(self.beam_bin_dz_wd_zero), real_dz_wd_bin_mean_mean), '-',
-						  linewidth=self.lwidth, color='r')  # beamwise bin mean diff
+						  linewidth=self.lwidth, color='r', label='Mean Bias')  # beamwise bin mean diff
 
 			self.ax2.plot(beam_bin_centers, np.add(real_dz_wd_bin_mean_mean, self.beam_bin_dz_wd_std), '-',
-						  linewidth=self.lwidth, color='b')  # beamwise bin mean + st. dev.
+						  linewidth=self.lwidth, color='b', label='+1 Sigma')  # beamwise bin mean + st. dev.
 			self.ax2.plot(beam_bin_centers, np.subtract(real_dz_wd_bin_mean_mean, self.beam_bin_dz_wd_std), '-',
-						  linewidth=self.lwidth, color='b')  # beamwise bin mean - st. dev.
+						  linewidth=self.lwidth, color='b', label='-1 Sigma')  # beamwise bin mean - st. dev.
 
 			print('survived flattening without zero mean...')
 
@@ -3332,17 +3334,18 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 					file_dz = [real_dz_ref_wd_dec[i] for i in file_indices]
 					self.ax2.scatter(file_angles, file_dz,
 									 marker='o', color=fname_to_color[fname], s=self.pt_size, alpha=self.pt_alpha)
+			self.ax2.scatter([], [], marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha, label='Soundings')
 		else:
 			self.ax2.scatter(real_beam_angle_dec, real_dz_ref_wd_dec,
-							 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha)
+							 marker='o', color='0.75', s=self.pt_size, alpha=self.pt_alpha, label='Soundings')
 
 		# raw differences from reference grid, small gray points
 		self.ax2.plot(beam_bin_centers, self.beam_bin_dz_wd_mean, '-',
-					  linewidth=self.lwidth, color='r')  # beamwise bin mean diff
+					  linewidth=self.lwidth, color='r', label='Mean Bias')  # beamwise bin mean diff
 		self.ax2.plot(beam_bin_centers, np.add(self.beam_bin_dz_wd_mean, self.beam_bin_dz_wd_std), '-',
-					  linewidth=self.lwidth, color='b')  # beamwise bin mean + st. dev.
+					  linewidth=self.lwidth, color='b', label='+1 Sigma')  # beamwise bin mean + st. dev.
 		self.ax2.plot(beam_bin_centers, np.subtract(self.beam_bin_dz_wd_mean, self.beam_bin_dz_wd_std), '-',
-					  linewidth=self.lwidth, color='b')  # beamwise bin mean - st. dev.
+					  linewidth=self.lwidth, color='b', label='-1 Sigma')  # beamwise bin mean - st. dev.
 
 		print('survived normal plotting!')
 
@@ -3351,6 +3354,20 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 		
 		# Plot soundings per bin
 		plot_soundings_per_bin(self)
+
+	# Add optional legends on both Accuracy tab axes.
+	if hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked():
+		self.ax1.legend(loc='upper right', fontsize=8)
+		# De-duplicate labels to avoid repeated entries from multiple plot calls.
+		handles, labels = self.ax2.get_legend_handles_labels()
+		unique = []
+		seen = set()
+		for handle, label in zip(handles, labels):
+			if label and label not in seen:
+				seen.add(label)
+				unique.append((handle, label))
+		if unique:
+			self.ax2.legend([h for h, _ in unique], [l for _, l in unique], loc='upper right', fontsize=8)
 
 	# update system info with xline detections
 	# update_system_info(self, self.det, force_update=True, fname_str_replace='_trimmed')
@@ -3871,8 +3888,13 @@ def add_grid_lines(self):
 		if self.grid_lines_toggle_chk.isChecked():
 			ax.grid()
 			ax.minorticks_on()
-			ax.grid(which='minor', linestyle='-', linewidth='0.5', color='black')
-			ax.grid(which='major', linestyle='-', linewidth='1.0', color='black')
+			# Use slightly stronger major lines and lighter minor lines on Accuracy tab plots.
+			if ax in [self.ax1, self.ax2]:
+				ax.grid(which='minor', linestyle='-', linewidth='0.35', color='black')
+				ax.grid(which='major', linestyle='-', linewidth='1.2', color='black')
+			else:
+				ax.grid(which='minor', linestyle='-', linewidth='0.5', color='black')
+				ax.grid(which='major', linestyle='-', linewidth='1.0', color='black')
 
 		else:
 			ax.grid(False)
@@ -4941,6 +4963,7 @@ def save_session(self):
 				'update_ref_plots': self.update_ref_plots_chk.isChecked(),
 				'show_xline_coverage': self.show_xline_cov_chk.isChecked(),
 				'show_uncertainty_plot': self.show_u_plot_chk.isChecked(),
+				'show_accuracy_legend': hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked(),
 				'show_shaded_relief': self.show_shaded_relief_chk.isChecked(),
 				'show_special_order': self.show_special_order_chk.isChecked(),
 				'show_order_1a': self.show_order_1a_chk.isChecked(),
@@ -5129,6 +5152,8 @@ def load_session(self):
 		self.update_ref_plots_chk.setChecked(plot_settings.get('update_ref_plots', True))
 		self.show_xline_cov_chk.setChecked(plot_settings.get('show_xline_coverage', True))
 		self.show_u_plot_chk.setChecked(plot_settings.get('show_uncertainty_plot', True))
+		if hasattr(self, 'show_accuracy_legend_chk'):
+			self.show_accuracy_legend_chk.setChecked(plot_settings.get('show_accuracy_legend', True))
 		self.show_shaded_relief_chk.setChecked(plot_settings.get('show_shaded_relief', True))
 		self.show_special_order_chk.setChecked(plot_settings.get('show_special_order', False))
 		self.show_order_1a_chk.setChecked(plot_settings.get('show_order_1a', False))
@@ -5261,6 +5286,7 @@ def save_current_plot_settings(self):
 			'update_ref_plots': self.update_ref_plots_chk.isChecked(),
 			'show_xline_coverage': self.show_xline_cov_chk.isChecked(),
 			'show_uncertainty_plot': self.show_u_plot_chk.isChecked(),
+			'show_accuracy_legend': hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked(),
 			'show_shaded_relief': self.show_shaded_relief_chk.isChecked(),
 			'show_special_order': self.show_special_order_chk.isChecked(),
 			'show_order_1a': self.show_order_1a_chk.isChecked(),
@@ -5371,6 +5397,8 @@ def load_last_plot_settings(self):
 		self.update_ref_plots_chk.setChecked(plot_settings.get('update_ref_plots', True))
 		self.show_xline_cov_chk.setChecked(plot_settings.get('show_xline_coverage', True))
 		self.show_u_plot_chk.setChecked(plot_settings.get('show_uncertainty_plot', True))
+		if hasattr(self, 'show_accuracy_legend_chk'):
+			self.show_accuracy_legend_chk.setChecked(plot_settings.get('show_accuracy_legend', True))
 		self.show_shaded_relief_chk.setChecked(plot_settings.get('show_shaded_relief', True))
 		self.show_special_order_chk.setChecked(plot_settings.get('show_special_order', False))
 		self.show_order_1a_chk.setChecked(plot_settings.get('show_order_1a', False))
@@ -5441,6 +5469,8 @@ def load_default_plot_settings(self):
 		self.update_ref_plots_chk.setChecked(True)
 		self.show_xline_cov_chk.setChecked(True)
 		self.show_u_plot_chk.setChecked(True)
+		if hasattr(self, 'show_accuracy_legend_chk'):
+			self.show_accuracy_legend_chk.setChecked(True)
 		self.show_shaded_relief_chk.setChecked(True)
 		self.show_special_order_chk.setChecked(False)
 		self.show_order_1a_chk.setChecked(False)
