@@ -2059,6 +2059,7 @@ def parse_crosslines(self):
 
 	if num_new_files == 0:
 		update_log(self, 'No new crossline files to parse')
+		self.calc_pb.setStyleSheet("")  # restore default progress bar styling
 		return 0
 
 	else:
@@ -2221,6 +2222,7 @@ def parse_crosslines(self):
 		update_log(self, f'Finished parsing {num_new_files} new file(s)')
 		self.current_file_lbl.setText('Current File [' + str(f + 1) + '/' + str(num_new_files) +
 									  ']: Finished parsing crosslines')
+		self.calc_pb.setStyleSheet("")  # restore default progress bar styling
 
 	self.calc_accuracy_btn.setStyleSheet("color: black; font-weight: normal")  # reset the button text color to default
 
