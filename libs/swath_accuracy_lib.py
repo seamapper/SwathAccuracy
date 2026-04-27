@@ -40,6 +40,9 @@ def setup(self):
 	self.ref = {}
 	self.xline_track = {}
 	self.tide = {}
+	self.ref_surf_file = ''
+	self.dens_surf_file = ''
+	self.tide_file = ''
 	self.ref_utm_str = 'N/A'
 	# self.det = {}  # detection dict (new data)
 	# self.det_archive = {}  # detection dict (archive data)
@@ -194,17 +197,23 @@ def update_buttons(self, recalc_acc=False):
 	# enable or disable file selection and calc_accuracy buttons depending on loaded files
 	print('updating buttons...')
 	get_current_file_list(self)
-	fnames_ref = [f for f in self.filenames if '.xyz' in f]
+	fnames_ref = [self.ref_surf_file] if getattr(self, 'ref_surf_file', '') else []
 	# fnames_xline = get_new_file_list(self, ['.all', '.kmall'], [])  # list new .all files not in det dict
 	fnames_xline = get_new_file_list(self, ['.all', '.kmall', 'ASCII.txt'], [])  # list new .all files not in det dict
 	fnames_xline_all = [f for f in self.filenames if any(ext in f for ext in ['.all', '.kmall', 'ASCII.txt'])]  # all crossline files
 
-	fnames_tide = [f for f in self.filenames if '.tid' in f]
+	fnames_tide = [self.tide_file] if getattr(self, 'tide_file', '') else []
 
-	self.add_ref_surf_btn.setEnabled(len(fnames_ref) == 0)  # enable ref surf selection only if none loaded
-	self.add_dens_surf_btn.setEnabled(('z' in self.ref.keys() and 'c' not in self.ref.keys()))  # enable if ref z avail
-	# Only enable Add Tide if at least one crossline and no tide file loaded
-	self.add_tide_btn.setEnabled(len(fnames_xline_all) > 0 and len(fnames_tide) == 0)
+	# Keep the reference button active as a load/remove toggle.
+	self.add_ref_surf_btn.setEnabled(True)
+	self.add_ref_surf_btn.setText('Remove Reference Surface' if len(fnames_ref) == 1 else 'Add Reference Surface')
+	# Keep density button active as add/remove toggle when a reference is loaded.
+	dens_loaded = bool(getattr(self, 'dens_surf_file', ''))
+	self.add_dens_surf_btn.setEnabled(('z' in self.ref.keys()) or dens_loaded)
+	self.add_dens_surf_btn.setText('Remove Density Surface' if dens_loaded else 'Add Density Surface')
+	# Always allow loading/removing a tide file (can be loaded before crosslines).
+	self.add_tide_btn.setEnabled(True)
+	self.add_tide_btn.setText('Remove Tide' if len(fnames_tide) == 1 else 'Add Tide')
 	
 	# Style Add Tide button when crossline files are loaded
 	# Check if accuracy has been calculated (indicates tide has been processed)
@@ -213,9 +222,9 @@ def update_buttons(self, recalc_acc=False):
 	                      any([k in self.xline.keys() for k in ['dz_ref_wd', 'dz_ref']]))
 	
 	if len(fnames_xline_all) > 0 and len(fnames_tide) == 0 and not accuracy_calculated:
-		self.add_tide_btn.setStyleSheet("background-color: lightyellow; color: black; font-weight: bold")
+		self.add_tide_btn.setStyleSheet("color: orange; font-weight: bold")
 	else:
-		self.add_tide_btn.setStyleSheet("color: black; font-weight: normal")
+		self.add_tide_btn.setStyleSheet("")
 
 	# enable calc_accuracy button only if one ref surf and at least one crossline are loaded
 	if (len(fnames_ref) == 1 and len(fnames_xline) > 0):
@@ -239,8 +248,14 @@ def update_buttons(self, recalc_acc=False):
 def add_ref_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
 	# add single reference surface file with extensions in ftype_filter
 	fname = add_files(self, ftype_filter, input_dir, include_subdir, multiselect=False)
-	
-	update_file_list(self, fname)
+
+	if not fname or len(fname) == 0 or fname[0] == '':
+		update_log(self, 'No files selected')
+		return
+
+	self.ref_surf_file = fname[0]
+	if hasattr(self, 'ref_surf_tb'):
+		self.ref_surf_tb.setText(os.path.basename(self.ref_surf_file))
 	# try to get UTM zone from filename; zone can be, e.g,, 'UTM-11S', '14N',  w/ or w/o UTM preceding and -, _, or ' '
 	# get decimal and hemisphere, strip zero padding and remove spaces for comparison to UTM combobox list
 	if fname and len(fname) > 0:
@@ -264,7 +279,7 @@ def add_ref_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
 			self.ref_utm_str = utm_str
 			parse_ref_depth(self)
 
-			if any([f for f in self.filenames if '.xyd' in f]) and 'c' not in self.ref:
+			if getattr(self, 'dens_surf_file', '') and 'c' not in self.ref:
 				print('processing density file already loaded but not added in self.ref yet (')
 				process_dens_file(self)
 
@@ -272,6 +287,38 @@ def add_ref_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
 			refresh_plot(self, refresh_list=['ref'], set_active_tab=1, sender='add_ref_file')
 
 	update_buttons(self, recalc_acc=True)
+
+
+def remove_ref_surface(self):
+	"""Remove the currently loaded reference surface and dependent density data."""
+	if not getattr(self, 'ref_surf_file', ''):
+		update_log(self, 'No reference surface loaded')
+		return
+
+	removed_ref = os.path.basename(self.ref_surf_file)
+	self.ref = {}
+	self.ref_surf_file = ''
+	self.ref_utm_str = 'N/A'
+	self.ref_proj_cbox.setCurrentIndex(0)
+	if hasattr(self, 'ref_surf_tb'):
+		self.ref_surf_tb.setText('No reference surface loaded')
+
+	# Density is tied to the reference surface, so clear it too.
+	self.dens_surf_file = ''
+	if hasattr(self, 'dens_surf_tb'):
+		self.dens_surf_tb.setText('No density surface loaded')
+
+	update_log(self, f'Removed reference surface: {removed_ref}')
+	refresh_plot(self, refresh_list=['ref', 'acc'], sender='remove_ref_surface')
+	update_buttons(self, recalc_acc=True)
+
+
+def handle_ref_surface_button(self):
+	"""Toggle reference surface load/remove from one button."""
+	if getattr(self, 'ref_surf_file', ''):
+		remove_ref_surface(self)
+	else:
+		add_ref_file(self, 'Reference surface XYZ (*.xyz)')
 
 
 def update_ref_utm_zone(self):
@@ -293,9 +340,45 @@ def update_ref_utm_zone(self):
 def add_dens_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
 	# add single density surface file with extensions in ftype_filter
 	fname = add_files(self, ftype_filter, input_dir, include_subdir, multiselect=False)
-	
-	update_file_list(self, fname)
+
+	if not fname or len(fname) == 0 or fname[0] == '':
+		update_log(self, 'No files selected')
+		return
+
+	self.dens_surf_file = fname[0]
+	if hasattr(self, 'dens_surf_tb'):
+		self.dens_surf_tb.setText(os.path.basename(self.dens_surf_file))
 	process_dens_file(self)
+
+
+def remove_dens_file(self):
+	"""Remove loaded density surface and keep reference surface loaded."""
+	if not getattr(self, 'dens_surf_file', ''):
+		update_log(self, 'No density surface loaded')
+		return
+
+	removed_dens = os.path.basename(self.dens_surf_file)
+	self.dens_surf_file = ''
+	if hasattr(self, 'dens_surf_tb'):
+		self.dens_surf_tb.setText('No density surface loaded')
+
+	# Remove density-related arrays/metadata only.
+	for k in ['fname_dens', 'c', 'c_grid', 'c_mask', 'c_ref_extent']:
+		self.ref.pop(k, None)
+
+	# Rebuild reference products and refresh.
+	make_ref_surf(self)
+	update_log(self, f'Removed density surface: {removed_dens}')
+	refresh_plot(self, refresh_list=['ref'], set_active_tab=1, sender='remove_dens_file')
+	update_buttons(self, recalc_acc=True)
+
+
+def handle_dens_surface_button(self):
+	"""Toggle density surface load/remove from one button."""
+	if getattr(self, 'dens_surf_file', ''):
+		remove_dens_file(self)
+	else:
+		add_dens_file(self, 'Density surface XYD (*.xyd)')
 
 
 def process_dens_file(self):
@@ -313,8 +396,14 @@ def process_dens_file(self):
 
 def add_tide_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
 	fname = add_files(self, ftype_filter, input_dir, include_subdir, multiselect=False)
-	
-	update_file_list(self, fname)
+
+	if not fname or len(fname) == 0 or fname[0] == '':
+		update_log(self, 'No files selected')
+		return
+
+	self.tide_file = fname[0]
+	if hasattr(self, 'tide_file_tb'):
+		self.tide_file_tb.setText(os.path.basename(self.tide_file))
 	update_buttons(self, recalc_acc=True)  # turn off tide button if loaded
 	process_tide(self)
 
@@ -326,6 +415,32 @@ def process_tide(self, unit_set_by_user=False):
 	refresh_plot(self, refresh_list=['tide'], set_active_tab=3, sender='add_tide_file')
 
 
+def remove_tide_file(self):
+	"""Remove loaded tide file and reset tide state."""
+	if not getattr(self, 'tide_file', ''):
+		update_log(self, 'No tide file loaded')
+		return
+
+	removed_tide = os.path.basename(self.tide_file)
+	self.tide_file = ''
+	self.tide = {}
+	self.tide_applied = False
+	self.tide_ax.clear()
+	if hasattr(self, 'tide_file_tb'):
+		self.tide_file_tb.setText('No tide file loaded')
+	update_log(self, f'Removed tide file: {removed_tide}')
+	refresh_plot(self, refresh_list=['tide', 'acc'], sender='remove_tide_file')
+	update_buttons(self, recalc_acc=True)
+
+
+def handle_tide_button(self):
+	"""Toggle tide file load/remove from one button."""
+	if getattr(self, 'tide_file', ''):
+		remove_tide_file(self)
+	else:
+		add_tide_file(self, 'Tide file (*.tid *.txt)')
+
+
 def add_acc_files(self, ftype_filter, input_dir='HOME', include_subdir=False):
 	# add accuracy crossline files with extensions in ftype_filter from input_dir and subdir if desired
 	fnames = add_files(self, ftype_filter, input_dir, include_subdir)
@@ -334,7 +449,7 @@ def add_acc_files(self, ftype_filter, input_dir='HOME', include_subdir=False):
 	update_buttons(self, recalc_acc=True)
 
 
-def remove_acc_files(self):  # remove selected files only
+def remove_acc_files(self):  # remove selected crossline files only
 	# recalc_acc = False
 	get_current_file_list(self)
 	selected_files = self.file_list.selectedItems()
@@ -387,28 +502,6 @@ def remove_acc_files(self):  # remove selected files only
 
 					# self.xline_track[fname].pop()
 
-				elif '.xyz' in fname:  # remove the single reference surface and reset ref dict
-
-					self.ref = {}
-					self.add_ref_surf_btn.setEnabled(True)  # enable button to add replacement reference surface
-					self.ref_proj_cbox.setCurrentIndex(0)
-
-				elif '.xyd' in fname:  # remove the single reference density and reset associated ref dict keys
-					# self.ref = {}
-					# remove density data from ref dict, if it exists
-					print('in remove_acc_files, self.ref.keys = ', self.ref.keys())
-					for k in ['fname_dens', 'c', 'c_grid']:
-						print('in remove_acc_files, popping density key =', k)
-						self.ref.pop(k, None)
-
-					self.add_dens_surf_btn.setEnabled(True)  # enable button to add replacement density surface
-
-				elif '.tid' in fname:  # remove the singe tide and reset tide dict
-					self.tide = {}
-					self.tide_ax.clear()
-					self.add_tide_btn.setEnabled(True)
-					self.tide_applied = False
-
 			except:  # will fail if detection dict has not been created yet (e.g., if calc_coverage has not been run)
 				#                    update_log(self, 'Failed to remove soundings stored from ' + fname)
 				pass
@@ -421,16 +514,6 @@ def remove_acc_files(self):  # remove selected files only
 		if any([ext in ['all', 'kmall'] for ext in f_exts]) and self.xline:
 			print('found all or kmall extension, calling bin_beamwise from remove_files')
 			bin_beamwise(self)
-
-		# recalculate accuracy if crossline data exists and the tide files change
-		if any([ext in ['tid'] for ext in f_exts]) and self.xline:
-			print('found tid extension, calling calc_accuracy from remove_files')
-			calc_accuracy(self)
-
-		# recalculate reference surface if depth or density
-		if any([ext in ['xyz', 'xyd'] for ext in f_exts]):
-			print('at end of remove_acc_files, found xyz or xyd, caling make_ref_surf')
-			make_ref_surf(self)
 
 	# reset xline dict if all files have been removed
 	get_current_file_list(self)
@@ -449,15 +532,12 @@ def clear_files(self):
 	self.file_list.clear()  # clear the file list display
 	self.filenames = []  # clear the list of (paths + files) passed to calc_coverage
 	self.xline = {}  # clear current non-archive detections
-	self.ref = {}  # clear ref surf data
-	self.tide = {}
+	self.xline_track = {}
 	bin_beamwise(self)  # call bin_beamwise with empty self.xline to reset all other binned results
-	remove_acc_files(self)  # remove files and refresh plot
+	refresh_plot(self, refresh_list=['acc'], sender='clear_files')
 	update_log(self, 'Cleared all files')
 	self.current_file_lbl.setText('Current File [0/0]:')
 	self.calc_pb.setValue(0)
-	self.add_ref_surf_btn.setEnabled(True)
-	self.ref_proj_cbox.setCurrentIndex(0)
 	
 	# Update button styling after clearing files
 	update_buttons(self)
@@ -682,10 +762,13 @@ def filter_xline(self, print_updates=True):
 
 def parse_tide(self, unit_set_by_user=False):  # force_refresh=False):
 	# add tide file if available -
-	fnames_tide = get_new_file_list(self, ['.tid', '.txt'], [])  # list .tid and .txt files
-	# print('fnames_tide is', fnames_tide)
+	fname_tide = getattr(self, 'tide_file', '')
+	if not fname_tide:
+		fnames_tide = get_new_file_list(self, ['.tid', '.txt'], [])  # legacy fallback
+		fname_tide = fnames_tide[0] if len(fnames_tide) == 1 else ''
+	# print('fname_tide is', fname_tide)
 
-	if len(fnames_tide) != 1:  # warn user to add exactly one tide file
+	if not fname_tide:  # warn user to add exactly one tide file
 		update_log(self, 'Add one tide text (.tid or .txt) file corresponding to the accuracy crossline location and '
 						 'covering the entire crossline data duration.\n\n'
 						 'Format should be ''YYYY/MM/DD[/]HH:MM[:SS] tide_amplitude'' with time in the same zone as '
@@ -698,7 +781,9 @@ def parse_tide(self, unit_set_by_user=False):  # force_refresh=False):
 	else:
 		tic = process_time()
 		update_log(self, 'Processing tide file')
-		fname_tide = fnames_tide[0]
+		self.tide_file = fname_tide
+		if hasattr(self, 'tide_file_tb'):
+			self.tide_file_tb.setText(os.path.basename(fname_tide))
 
 		self.tide = {}
 		self.tide['fname'] = fname_tide.rsplit('/', 1)[1]
@@ -912,15 +997,19 @@ def parse_ref_depth(self):
 	# optional fourth field for uncertainty (e.g., Qimera CUBE surface export), set to 0 if not included
 
 	self.ref = {}
-	fnames_xyz = get_new_file_list(self, ['.xyz'], [])  # list .xyz files
-	print('fnames_xyz is', fnames_xyz)
+	fname_ref = getattr(self, 'ref_surf_file', '')
+	if not fname_ref:
+		fnames_xyz = get_new_file_list(self, ['.xyz'], [])  # legacy fallback
+		fname_ref = fnames_xyz[0] if len(fnames_xyz) == 1 else ''
+	print('fname_ref is', fname_ref)
 
-	if len(fnames_xyz) != 1:  # warn user to add exactly one ref grid
+	if not fname_ref:  # warn user to add exactly one ref grid
 		update_log(self, 'Please add one reference grid .xyz file in a UTM projection')
 		pass
 
 	else:
-		fname_ref = fnames_xyz[0]
+		if hasattr(self, 'ref_surf_tb'):
+			self.ref_surf_tb.setText(os.path.basename(fname_ref))
 		self.ref['fname'] = fname_ref.rsplit('/', 1)[1]
 		print(fname_ref)
 		fid_ref = open(fname_ref, 'r')
@@ -1046,17 +1135,7 @@ def remove_incompatible_density_surface(self, fname_dens):
 		fname_dens: Path to the incompatible density surface file
 	"""
 	try:
-		# Find the file in the file list and remove it
-		for i in range(self.file_list.count()):
-			item = self.file_list.item(i)
-			if item and fname_dens in item.text():
-				self.file_list.takeItem(i)
-				update_log(self, f'Removed incompatible density surface: {os.path.basename(fname_dens)}')
-				break
-		
-		# Remove from filenames list
-		if fname_dens in self.filenames:
-			self.filenames.remove(fname_dens)
+		update_log(self, f'Removed incompatible density surface: {os.path.basename(fname_dens)}')
 		
 		# Clean up any density data from ref dict
 		for k in ['fname_dens', 'c', 'c_grid', 'c_ref_extent']:
@@ -1065,6 +1144,9 @@ def remove_incompatible_density_surface(self, fname_dens):
 		
 		# Re-enable the density surface button
 		self.add_dens_surf_btn.setEnabled(True)
+		self.dens_surf_file = ''
+		if hasattr(self, 'dens_surf_tb'):
+			self.dens_surf_tb.setText('No density surface loaded')
 		
 		# Refresh the plot to remove density-related displays
 		refresh_plot(self, refresh_list=['ref'], sender='remove_incompatible_density_surface')
@@ -1076,20 +1158,15 @@ def remove_incompatible_density_surface(self, fname_dens):
 
 def parse_ref_dens(self):
 	# add density surface if available - this is useful for Qimera .xyz files that do not include density
-	fnames_xyd = get_new_file_list(self, ['.xyd'], [])  # list .xyz files
-	print('fnames_xyd is', fnames_xyd)
+	fname_dens = getattr(self, 'dens_surf_file', '')
+	if not fname_dens:
+		fnames_xyd = get_new_file_list(self, ['.xyd'], [])  # legacy fallback
+		fname_dens = fnames_xyd[-1] if len(fnames_xyd) > 0 else ''
+	print('fname_dens is', fname_dens)
 
-	if len(fnames_xyd) == 0:  # no density files
+	if not fname_dens:  # no density files
 		update_log(self, 'No density surface files found')
 		return
-	elif len(fnames_xyd) > 1:  # multiple density files - use the most recent one
-		update_log(self, f'Multiple density files found ({len(fnames_xyd)}). Using the most recent one.')
-		# Sort by modification time and use the most recent
-		fnames_xyd.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-		fname_dens = fnames_xyd[0]
-		update_log(self, f'Using density file: {os.path.basename(fname_dens)}')
-	else:  # exactly one density file
-		fname_dens = fnames_xyd[0]
 	
 	try:
 		tic = process_time()
@@ -1105,7 +1182,10 @@ def parse_ref_dens(self):
 		if not os.path.exists(fname_dens):
 			update_log(self, f'ERROR: Density file not found: {fname_dens}', font_color="red")
 			return
-			
+		
+		if hasattr(self, 'dens_surf_tb'):
+			self.dens_surf_tb.setText(os.path.basename(fname_dens))
+		self.dens_surf_file = fname_dens
 		self.ref['fname_dens'] = fname_dens
 		e_dens, n_dens, c_dens = [], [], []
 		
@@ -1150,7 +1230,7 @@ def parse_ref_dens(self):
 		# Validate density surface compatibility
 		is_compatible, error_message = validate_density_surface_compatibility(self, e_dens, n_dens, c_dens)
 		if not is_compatible:
-			update_log(self, f'ERROR: {error_message}. Please remove the file from the sources list.', font_color="red")
+			update_log(self, f'ERROR: {error_message}. Please load a different density surface file.', font_color="red")
 			# Remove the incompatible density surface from sources
 			remove_incompatible_density_surface(self, fname_dens)
 			return
@@ -1483,34 +1563,49 @@ def plot_ref_surf(self):
 		return
 
 	ones_mask = np.ones_like(self.ref['final_mask'])  # alternative mask to show all data in each grid
+	scale_to_displayed = hasattr(self, 'scale_loaded_depth_colors_chk') and self.scale_loaded_depth_colors_chk.isChecked()
+	def _clim_from_displayed(grid, fallback):
+		valid_vals = grid[np.isfinite(grid)]
+		if valid_vals.size == 0:
+			return fallback
+		return [np.nanmin(valid_vals), np.nanmax(valid_vals)]
 
 	# update subplots with reference surface and masks; all subplots use same extent from depth grid
 	if 'z_grid' in self.ref:  # plot depth and final depths if available
 		print('plotting depth)')
 		self.clim_z = [np.nanmin(self.ref['z_grid']), np.nanmax(self.ref['z_grid'])]
-		self.cbar_dict['z']['clim'] = self.clim_z
-		self.cbar_dict['z_filt']['clim'] = self.clim_z
-		self.cbar_dict['z_final']['clim'] = self.clim_z
-		self.cbar_dict['z_depth']['clim'] = self.clim_z
+		depth_full_clim = self.clim_z
 
 		# subplot depth as parsed or as filtered
 		plot_mask = (self.ref['z_mask'] if self.update_ref_plots_chk.isChecked() else ones_mask)
-		self.surf_ax1.imshow(self.ref['z_grid']*plot_mask, interpolation='none', cmap='rainbow',
-							 vmin=self.clim_z[0], vmax=self.clim_z[1], extent=self.ref['z_ref_extent'])
+		depth_plot_grid = self.ref['z_grid'] * plot_mask
+		depth_final_grid = self.ref['z_grid'] * self.ref['final_mask']
+		depth_tab_grid = self.ref['z_grid'] * self.ref['z_mask']
+		depth_main_clim = _clim_from_displayed(depth_plot_grid, depth_full_clim) if scale_to_displayed else depth_full_clim
+		depth_filt_clim = _clim_from_displayed(depth_final_grid, depth_full_clim) if scale_to_displayed else depth_full_clim
+		depth_tab_clim = _clim_from_displayed(depth_tab_grid, depth_full_clim) if scale_to_displayed else depth_full_clim
+
+		self.cbar_dict['z']['clim'] = depth_main_clim
+		self.cbar_dict['z_filt']['clim'] = depth_filt_clim
+		self.cbar_dict['z_final']['clim'] = depth_filt_clim
+		self.cbar_dict['z_depth']['clim'] = depth_tab_clim
+
+		self.surf_ax1.imshow(depth_plot_grid, interpolation='none', cmap='rainbow',
+							 vmin=depth_main_clim[0], vmax=depth_main_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Add shaded relief if enabled
 		if hasattr(self, 'show_shaded_relief_chk') and self.show_shaded_relief_chk.isChecked():
-			add_shaded_relief(self, self.surf_ax1, self.ref['z_grid']*plot_mask, self.ref['z_ref_extent'])
+			add_shaded_relief(self, self.surf_ax1, depth_plot_grid, self.ref['z_ref_extent'])
 
 						# large plot of final masked depth surface
 		print('*******plotting final masked depth surface on final tab')
-		print('the final masked depth grid will be =', self.ref['z_grid']*self.ref['final_mask'])
-		self.surf_ax5.imshow(self.ref['z_grid']*self.ref['final_mask'], interpolation='none', cmap='rainbow',
-					vmin=self.clim_z[0], vmax=self.clim_z[1], extent=self.ref['z_ref_extent'])
+		print('the final masked depth grid will be =', depth_final_grid)
+		self.surf_ax5.imshow(depth_final_grid, interpolation='none', cmap='rainbow',
+					vmin=depth_filt_clim[0], vmax=depth_filt_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Add shaded relief if enabled
 		if hasattr(self, 'show_shaded_relief_chk') and self.show_shaded_relief_chk.isChecked():
-			add_shaded_relief(self, self.surf_ax5, self.ref['z_grid']*self.ref['final_mask'], self.ref['z_ref_extent'])
+			add_shaded_relief(self, self.surf_ax5, depth_final_grid, self.ref['z_ref_extent'])
 		
 		# Add crossline coverage to final surface tab if enabled
 		print(f"DEBUG: Checking crossline coverage condition: 'e' in self.xline = {'e' in self.xline}, 'n' in self.xline = {'n' in self.xline}, show_xline_cov_chk.isChecked() = {self.show_xline_cov_chk.isChecked()}")
@@ -1561,12 +1656,12 @@ def plot_ref_surf(self):
 		
 		# Plot depth surface on depth tab
 		self.depth_ax.clear()
-		self.depth_ax.imshow(self.ref['z_grid'] * self.ref['z_mask'], interpolation='none', cmap='rainbow',
-					vmin=self.clim_z[0], vmax=self.clim_z[1], extent=self.ref['z_ref_extent'])
+		self.depth_ax.imshow(depth_tab_grid, interpolation='none', cmap='rainbow',
+					vmin=depth_tab_clim[0], vmax=depth_tab_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Add shaded relief to depth tab if enabled
 		if hasattr(self, 'show_shaded_relief_chk') and self.show_shaded_relief_chk.isChecked():
-			add_shaded_relief(self, self.depth_ax, self.ref['z_grid'] * self.ref['z_mask'], self.ref['z_ref_extent'])
+			add_shaded_relief(self, self.depth_ax, depth_tab_grid, self.ref['z_ref_extent'])
 		
 
 		
@@ -1599,17 +1694,22 @@ def plot_ref_surf(self):
 	# plot density if available
 	if 'c_grid' in self.ref and 'z_ref_extent' in self.ref:
 		self.clim_c = [np.nanmin(self.ref['c_grid']), np.nanmax(self.ref['c_grid'])]
-		self.cbar_dict['c']['clim'] = self.clim_c
-		self.cbar_dict['c_final']['clim'] = self.clim_c
+		dens_full_clim = self.clim_c
 		# plot density grid as parsed or as filtered
 		plot_mask = (self.ref['c_mask'] if self.update_ref_plots_chk.isChecked() else ones_mask)
-		self.surf_ax2.imshow(self.ref['c_grid']*plot_mask, interpolation='none', cmap='rainbow',
-							 vmin=self.clim_c[0], vmax=self.clim_c[1], extent=self.ref['z_ref_extent'])
+		dens_plot_grid = self.ref['c_grid'] * plot_mask
+		dens_final_grid = self.ref['c_grid'] * self.ref['c_mask']
+		dens_main_clim = _clim_from_displayed(dens_plot_grid, dens_full_clim) if scale_to_displayed else dens_full_clim
+		dens_final_clim = _clim_from_displayed(dens_final_grid, dens_full_clim) if scale_to_displayed else dens_full_clim
+		self.cbar_dict['c']['clim'] = dens_main_clim
+		self.cbar_dict['c_final']['clim'] = dens_final_clim
+		self.surf_ax2.imshow(dens_plot_grid, interpolation='none', cmap='jet',
+							 vmin=dens_main_clim[0], vmax=dens_main_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Plot density final masked surface on density final tab
 		self.density_final_ax.clear()
-		self.density_final_ax.imshow(self.ref['c_grid'] * self.ref['c_mask'], interpolation='none', cmap='rainbow',
-									vmin=self.clim_c[0], vmax=self.clim_c[1], extent=self.ref['z_ref_extent'])
+		self.density_final_ax.imshow(dens_final_grid, interpolation='none', cmap='jet',
+									vmin=dens_final_clim[0], vmax=dens_final_clim[1], extent=self.ref['z_ref_extent'])
 		
 		
 		
@@ -1643,27 +1743,23 @@ def plot_ref_surf(self):
 
 	# plot slope if available
 	if 's_grid' in self.ref and 'z_ref_extent' in self.ref:
-		# Use actual data range instead of hardcoded [0, 5]
-		slope_data = self.ref['s_grid']
-		if self.update_ref_plots_chk.isChecked():
-			slope_data = slope_data * self.ref['s_mask']
-		# Calculate actual min/max from valid (non-NaN) data
-		valid_slope = slope_data[~np.isnan(slope_data)]
-		if len(valid_slope) > 0:
-			self.clim_s = [np.nanmin(valid_slope), np.nanmax(valid_slope)]
-		else:
-			self.clim_s = [0, 1]  # fallback if no valid data
-		self.cbar_dict['s']['clim'] = self.clim_s
-		self.cbar_dict['s_final']['clim'] = self.clim_s
+		self.clim_s = [np.nanmin(self.ref['s_grid']), np.nanmax(self.ref['s_grid'])]
+		slope_full_clim = self.clim_s
 		# plot max slope as calculated or as filtered
 		plot_mask = (self.ref['s_mask'] if self.update_ref_plots_chk.isChecked() else ones_mask)
-		self.surf_ax3.imshow(self.ref['s_grid']*plot_mask, interpolation='none', cmap='rainbow',
-							 vmin=self.clim_s[0], vmax=self.clim_s[1], extent=self.ref['z_ref_extent'])
+		slope_plot_grid = self.ref['s_grid'] * plot_mask
+		slope_final_grid = self.ref['s_grid'] * self.ref['s_mask']
+		slope_main_clim = _clim_from_displayed(slope_plot_grid, slope_full_clim) if scale_to_displayed else slope_full_clim
+		slope_final_clim = _clim_from_displayed(slope_final_grid, slope_full_clim) if scale_to_displayed else slope_full_clim
+		self.cbar_dict['s']['clim'] = slope_main_clim
+		self.cbar_dict['s_final']['clim'] = slope_final_clim
+		self.surf_ax3.imshow(slope_plot_grid, interpolation='none', cmap='plasma',
+							 vmin=slope_main_clim[0], vmax=slope_main_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Plot slope final masked surface on slope final tab
 		self.slope_final_ax.clear()
-		self.slope_final_ax.imshow(self.ref['s_grid'] * self.ref['s_mask'], interpolation='none', cmap='rainbow',
-								  vmin=self.clim_s[0], vmax=self.clim_s[1], extent=self.ref['z_ref_extent'])
+		self.slope_final_ax.imshow(slope_final_grid, interpolation='none', cmap='plasma',
+								  vmin=slope_final_clim[0], vmax=slope_final_clim[1], extent=self.ref['z_ref_extent'])
 		
 
 		
@@ -1699,20 +1795,25 @@ def plot_ref_surf(self):
 		# print('self.ref[z_ref_extent] =', self.ref['z_ref_extent'])
 		print('in u_grid, setting clim_u')
 		self.clim_u = [np.nanmin(self.ref['u_grid']), np.nanmax(self.ref['u_grid'])]
+		unc_full_clim = self.clim_u
 		print('in plot_ref_surf, plotting uncertainty with self.clim_u = ', self.clim_u)
-		self.cbar_dict['u']['clim'] = self.clim_u
-		self.cbar_dict['u_final']['clim'] = self.clim_u
 		print('assigned self.cbar_dict =', self.cbar_dict)
 		print('calling plot_mask')
 		plot_mask = (self.ref['u_mask'] if self.update_ref_plots_chk.isChecked() else ones_mask)
+		unc_plot_grid = self.ref['u_grid'] * plot_mask
+		unc_final_grid = self.ref['u_grid'] * self.ref['u_mask']
+		unc_main_clim = _clim_from_displayed(unc_plot_grid, unc_full_clim) if scale_to_displayed else unc_full_clim
+		unc_final_clim = _clim_from_displayed(unc_final_grid, unc_full_clim) if scale_to_displayed else unc_full_clim
+		self.cbar_dict['u']['clim'] = unc_main_clim
+		self.cbar_dict['u_final']['clim'] = unc_final_clim
 		print('survived plot_mask')
-		self.surf_ax4.imshow(self.ref['u_grid'] * plot_mask, interpolation='none', cmap='rainbow',
-							 vmin=self.clim_u[0], vmax=self.clim_u[1], extent=self.ref['z_ref_extent'])
+		self.surf_ax4.imshow(unc_plot_grid, interpolation='none', cmap='rainbow',
+							 vmin=unc_main_clim[0], vmax=unc_main_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Plot uncertainty final masked surface on uncertainty final tab
 		self.uncertainty_final_ax.clear()
-		self.uncertainty_final_ax.imshow(self.ref['u_grid'] * self.ref['u_mask'], interpolation='none', cmap='rainbow',
-										vmin=self.clim_u[0], vmax=self.clim_u[1], extent=self.ref['z_ref_extent'])
+		self.uncertainty_final_ax.imshow(unc_final_grid, interpolation='none', cmap='rainbow',
+										vmin=unc_final_clim[0], vmax=unc_final_clim[1], extent=self.ref['z_ref_extent'])
 		
 
 		
@@ -1740,12 +1841,14 @@ def plot_ref_surf(self):
 		self._setup_uncertainty_tooltip()
 		
 	elif 'z_grid' in self.ref:  # otherwise, plot masked final depths
-		self.surf_ax4.imshow(self.ref['z_grid'] * self.ref['final_mask'], interpolation='none', cmap='rainbow',
-							 vmin=self.clim_z[0], vmax=self.clim_z[1], extent=self.ref['z_ref_extent'])
+		depth_final_grid = self.ref['z_grid'] * self.ref['final_mask']
+		depth_filt_clim = self.cbar_dict['z_filt']['clim'] if 'z_filt' in self.cbar_dict else self.clim_z
+		self.surf_ax4.imshow(depth_final_grid, interpolation='none', cmap='rainbow',
+							 vmin=depth_filt_clim[0], vmax=depth_filt_clim[1], extent=self.ref['z_ref_extent'])
 		
 		# Add shaded relief if enabled
 		if hasattr(self, 'show_shaded_relief_chk') and self.show_shaded_relief_chk.isChecked():
-			add_shaded_relief(self, self.surf_ax4, self.ref['z_grid'] * self.ref['final_mask'], self.ref['z_ref_extent'])
+			add_shaded_relief(self, self.surf_ax4, depth_final_grid, self.ref['z_ref_extent'])
 
 	# add labels to all subplots (update uncertainty title later, if plotted)
 	for ax, t in {self.surf_ax1: 'Reference Surface (Depth)', self.surf_ax2: 'Reference Surface (Density)',
@@ -1797,7 +1900,12 @@ def plot_ref_surf(self):
 		else:
 			tval = np.linspace(clim[0], clim[1], 11)
 			
-		cbar = colorbar.ColorbarBase(cbaxes, cmap='rainbow', orientation='vertical',
+		cbar_cmap = 'rainbow'
+		if subplot in ['s', 's_final']:
+			cbar_cmap = 'plasma'
+		elif subplot in ['c', 'c_final']:
+			cbar_cmap = 'jet'
+		cbar = colorbar.ColorbarBase(cbaxes, cmap=cbar_cmap, orientation='vertical',
 									norm=colors.Normalize(clim[0], clim[1]),
 									ticks=tval, ticklocation='left')
 
@@ -4965,6 +5073,7 @@ def save_session(self):
 				'show_uncertainty_plot': self.show_u_plot_chk.isChecked(),
 				'show_accuracy_legend': hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked(),
 				'show_shaded_relief': self.show_shaded_relief_chk.isChecked(),
+				'scale_loaded_data_colors': hasattr(self, 'scale_loaded_depth_colors_chk') and self.scale_loaded_depth_colors_chk.isChecked(),
 				'show_special_order': self.show_special_order_chk.isChecked(),
 				'show_order_1a': self.show_order_1a_chk.isChecked(),
 				'show_order_1b': self.show_order_1b_chk.isChecked(),
@@ -5155,6 +5264,10 @@ def load_session(self):
 		if hasattr(self, 'show_accuracy_legend_chk'):
 			self.show_accuracy_legend_chk.setChecked(plot_settings.get('show_accuracy_legend', True))
 		self.show_shaded_relief_chk.setChecked(plot_settings.get('show_shaded_relief', True))
+		if hasattr(self, 'scale_loaded_depth_colors_chk'):
+			self.scale_loaded_depth_colors_chk.setChecked(
+				plot_settings.get('scale_loaded_data_colors', plot_settings.get('scale_loaded_depth_colors', True))
+			)
 		self.show_special_order_chk.setChecked(plot_settings.get('show_special_order', False))
 		self.show_order_1a_chk.setChecked(plot_settings.get('show_order_1a', False))
 		self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
@@ -5288,6 +5401,7 @@ def save_current_plot_settings(self):
 			'show_uncertainty_plot': self.show_u_plot_chk.isChecked(),
 			'show_accuracy_legend': hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked(),
 			'show_shaded_relief': self.show_shaded_relief_chk.isChecked(),
+			'scale_loaded_data_colors': hasattr(self, 'scale_loaded_depth_colors_chk') and self.scale_loaded_depth_colors_chk.isChecked(),
 			'show_special_order': self.show_special_order_chk.isChecked(),
 			'show_order_1a': self.show_order_1a_chk.isChecked(),
 			'show_order_1b': self.show_order_1b_chk.isChecked(),
@@ -5400,6 +5514,10 @@ def load_last_plot_settings(self):
 		if hasattr(self, 'show_accuracy_legend_chk'):
 			self.show_accuracy_legend_chk.setChecked(plot_settings.get('show_accuracy_legend', True))
 		self.show_shaded_relief_chk.setChecked(plot_settings.get('show_shaded_relief', True))
+		if hasattr(self, 'scale_loaded_depth_colors_chk'):
+			self.scale_loaded_depth_colors_chk.setChecked(
+				plot_settings.get('scale_loaded_data_colors', plot_settings.get('scale_loaded_depth_colors', True))
+			)
 		self.show_special_order_chk.setChecked(plot_settings.get('show_special_order', False))
 		self.show_order_1a_chk.setChecked(plot_settings.get('show_order_1a', False))
 		self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
@@ -5472,6 +5590,8 @@ def load_default_plot_settings(self):
 		if hasattr(self, 'show_accuracy_legend_chk'):
 			self.show_accuracy_legend_chk.setChecked(True)
 		self.show_shaded_relief_chk.setChecked(True)
+		if hasattr(self, 'scale_loaded_depth_colors_chk'):
+			self.scale_loaded_depth_colors_chk.setChecked(True)
 		self.show_special_order_chk.setChecked(False)
 		self.show_order_1a_chk.setChecked(False)
 		self.show_order_1b_chk.setChecked(False)

@@ -57,11 +57,11 @@ License:
     CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
     ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
     POSSIBILITY OF SUCH DAMAGE.
-
+    
 ===============================================================================
 """
 
-__version__ = "2026.02"
+__version__ = "2026.03"
 
 import sys
 import os
@@ -154,12 +154,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.get_indir_btn.clicked.connect(lambda: add_acc_files(self, ['.all', '.kmall'], input_dir='',
                                                                  include_subdir=self.include_subdir_chk.isChecked()))
-        self.get_outdir_btn.clicked.connect(lambda: get_output_dir(self))
-        self.add_ref_surf_btn.clicked.connect(lambda: add_ref_file(self, 'Reference surface XYZ (*.xyz)'))
-        self.add_dens_surf_btn.clicked.connect(lambda: add_dens_file(self, 'Density surface XYD (*.xyd)'))
+        self.add_ref_surf_btn.clicked.connect(lambda: handle_ref_surface_button(self))
+        self.add_dens_surf_btn.clicked.connect(lambda: handle_dens_surface_button(self))
         self.export_geotiff_btn.clicked.connect(lambda: export_all_to_geotiff(self))
         # self.add_tide_btn.clicked.connect(lambda: add_tide_file(self, 'Tide file (*.tid)'))
-        self.add_tide_btn.clicked.connect(lambda: add_tide_file(self, 'Tide file (*.tid *.txt)'))
+        self.add_tide_btn.clicked.connect(lambda: handle_tide_button(self))
         self.rmv_file_btn.clicked.connect(lambda: remove_acc_files(self))
         # self.rmv_file_btn.clicked.connect(lambda: remove_files(self))
         self.clr_file_btn.clicked.connect(lambda: clear_files(self))
@@ -252,6 +251,7 @@ class MainWindow(QtWidgets.QMainWindow):
                        self.show_cruise_chk,
                        self.show_accuracy_legend_chk,
                        self.show_shaded_relief_chk,
+                       self.scale_loaded_depth_colors_chk,
                        self.show_special_order_chk,
                        self.show_order_1a_chk,
                        self.show_order_1b_chk,
@@ -420,14 +420,16 @@ class MainWindow(QtWidgets.QMainWindow):
         btnw = 140  # width of file control button
 
         # add reference surface import options (processed elsewhere, XYZ in meters positive up, UTM 1-60N through 1-60S)
-        self.add_ref_surf_btn = PushButton('Add Ref. Surface', btnw, btnh, 'add_ref_surf_btn',
+        self.add_ref_surf_btn = PushButton('Add Reference Surface', btnw, btnh, 'add_ref_surf_btn',
                                            'Add a reference surface in UTM projection with northing, easting, and '
                                            'depth in meters, with depth positive up / negative down.')
-        self.add_dens_surf_btn = PushButton('Add Dens. Surface', btnw, btnh, 'add_ref_surf_btn',
+        self.add_dens_surf_btn = PushButton('Add Density Surface', btnw, btnh, 'add_ref_surf_btn',
                                            'Add a sounding density surface corresponding to the reference surface, if '
                                            'needed (e.g., Qimera .xyz exports do not include sounding density. '
                                            'A density layer can be exported from the same surface as .xyz, changed to '
                                            '.xyd for clarity, and imported here to support filtering by sounding count')
+        self.add_ref_surf_btn.setFixedWidth(170)
+        self.add_dens_surf_btn.setFixedWidth(170)
 
         proj_list = [str(i) + 'N' for i in range(1, 61)]  # list of all UTM zones, 1-60N and 1-60S
         proj_list.extend([str(i) + 'S' for i in range(1, 61)])
@@ -435,34 +437,65 @@ class MainWindow(QtWidgets.QMainWindow):
         EPSG_list.extend([str(i) for i in range(32701, 32761)])  # add EPSG codes for WGS84 UTM1-60S
         self.proj_dict = dict(zip(proj_list, EPSG_list))  # save for lookup during xline UTM zone conversion with pyproj
         self.ref_proj_cbox = ComboBox(proj_list, 80, 20, 'ref_proj_cbox', 'Select the reference surface UTM projection')
-        ref_cbox_layout = BoxLayout([Label('Proj.:', 50, 20, 'ref_proj_lbl', (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)),
-                                     self.ref_proj_cbox], 'h')
-        # ref_cbox_layout.addStretch()
-        
         # Add Export All to GeoTIFF button
         self.export_geotiff_btn = PushButton('Export All to GeoTIFF', btnw, btnh, 'export_geotiff_btn',
                                             'Export Final Surface, Depth, Uncertainty, Density, and Slope as GeoTIFF files')
+        ref_cbox_layout = BoxLayout([Label('Proj.:', 50, 20, 'ref_proj_lbl', (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)),
+                                     self.ref_proj_cbox, self.export_geotiff_btn], 'h')
+        # ref_cbox_layout.addStretch()
         
-        ref_btn_layout = BoxLayout([self.add_ref_surf_btn, self.add_dens_surf_btn, ref_cbox_layout, self.export_geotiff_btn], 'v')
+        self.ref_surf_tb = LineEdit('No reference surface loaded', 200, 20, 'ref_surf_tb',
+                                    'Loaded reference surface filename')
+        self.ref_surf_tb.setReadOnly(True)
+        # LineEdit() sets a fixed size; release width constraints so it can expand.
+        self.ref_surf_tb.setMinimumWidth(0)
+        self.ref_surf_tb.setMaximumWidth(16777215)
+        self.ref_surf_tb.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        ref_file_layout = QtWidgets.QHBoxLayout()
+        ref_file_layout.addWidget(self.add_ref_surf_btn)
+        ref_file_layout.addWidget(self.ref_surf_tb, 1)
+        self.dens_surf_tb = LineEdit('No density surface loaded', 200, 20, 'dens_surf_tb',
+                                     'Loaded density surface filename')
+        self.dens_surf_tb.setReadOnly(True)
+        self.dens_surf_tb.setMinimumWidth(0)
+        self.dens_surf_tb.setMaximumWidth(16777215)
+        self.dens_surf_tb.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        dens_file_layout = QtWidgets.QHBoxLayout()
+        dens_file_layout.addWidget(self.add_dens_surf_btn)
+        dens_file_layout.addWidget(self.dens_surf_tb, 1)
+        ref_btn_layout = BoxLayout([ref_file_layout, dens_file_layout, ref_cbox_layout], 'v')
         ref_utm_gb = GroupBox('Reference Surface', ref_btn_layout, False, False, 'ref_surf_gb')
 
         # add crossline file control buttons and file list
         self.add_file_btn = PushButton('Add Crosslines', btnw, btnh, 'add_xlines_btn', 'Add crossline files')
         self.get_indir_btn = PushButton('Add Directory', btnw, btnh, 'get_indir_btn', 'Add a directory')
-        self.include_subdir_chk = CheckBox('Incl. subfolders', False, 'include_subdir_chk',
+        self.add_file_btn.setMinimumWidth(0)
+        self.add_file_btn.setMaximumWidth(16777215)
+        self.add_file_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.get_indir_btn.setMinimumWidth(0)
+        self.get_indir_btn.setMaximumWidth(16777215)
+        self.get_indir_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.include_subdir_chk = CheckBox('Include Subdirectories', False, 'include_subdir_chk',
                                            'Include subdirectories when adding a directory')
-        self.show_path_chk = CheckBox('Show file paths', False, 'show_paths_chk', 'Show file paths')
-        self.get_outdir_btn = PushButton('Select Output Dir.', btnw, btnh, 'get_outdir_btn',
-                                         'Select the output directory (see current directory below)')
-        source_btn_layout = BoxLayout([self.add_file_btn, self.get_indir_btn, self.get_outdir_btn, 
-                                       self.include_subdir_chk, self.show_path_chk], 'v')
-        source_btn_gb = GroupBox('Crosslines', source_btn_layout, False, False, 'source_btn_gb')
-
+        self.show_path_chk = CheckBox('Show File Paths', False, 'show_paths_chk', 'Show file paths')
+        crossline_left_col = BoxLayout([self.add_file_btn], 'v')
+        crossline_right_col = BoxLayout([self.get_indir_btn], 'v')
         # add file management buttons
         self.rmv_file_btn = PushButton('Remove Selected', btnw, btnh, 'rmv_file_btn', 'Remove selected files')
         self.clr_file_btn = PushButton('Remove All Files', btnw, btnh, 'clr_file_btn', 'Remove all files')
-        file_mgmt_layout = BoxLayout([self.rmv_file_btn, self.clr_file_btn], 'v')
-        file_mgmt_gb = GroupBox('File Management', file_mgmt_layout, False, False, 'file_mgmt_gb')
+        self.rmv_file_btn.setMinimumWidth(0)
+        self.rmv_file_btn.setMaximumWidth(16777215)
+        self.rmv_file_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.clr_file_btn.setMinimumWidth(0)
+        self.clr_file_btn.setMaximumWidth(16777215)
+        self.clr_file_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        crossline_left_col.addWidget(self.rmv_file_btn)
+        crossline_left_col.addWidget(self.include_subdir_chk)
+        crossline_right_col.addWidget(self.clr_file_btn)
+        crossline_right_col.addWidget(self.show_path_chk)
+        add_crosslines_layout = QtWidgets.QHBoxLayout()
+        add_crosslines_layout.addLayout(crossline_left_col, 1)
+        add_crosslines_layout.addLayout(crossline_right_col, 1)
 
         # add tide file control buttons
         self.add_tide_btn = PushButton('Add Tide', btnw, btnh, 'add_tide_btn',
@@ -472,29 +505,48 @@ class MainWindow(QtWidgets.QMainWindow):
                                        'The time zone is assumed to match that used in the accuracy crossline files '
                                        'and the vertical datum is assumed to match that used during processing of the '
                                        'reference surface.')
+        self.add_tide_btn.setFixedWidth(170)
+        self.tide_file_tb = LineEdit('No tide file loaded', 200, 20, 'tide_file_tb',
+                                     'Loaded tide filename')
+        self.tide_file_tb.setReadOnly(True)
+        self.tide_file_tb.setMinimumWidth(0)
+        self.tide_file_tb.setMaximumWidth(16777215)
+        self.tide_file_tb.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        tide_file_layout = QtWidgets.QHBoxLayout()
+        tide_file_layout.addWidget(self.add_tide_btn)
+        tide_file_layout.addWidget(self.tide_file_tb, 1)
 
-        tide_btn_gb = GroupBox('Tide', BoxLayout([self.add_tide_btn], 'v'), False, False, 'tide_btn_gb')
+        tide_btn_gb = GroupBox('Tide', BoxLayout([tide_file_layout], 'v'), False, False, 'tide_btn_gb')
 
-        self.calc_accuracy_btn = PushButton('Calc Accuracy', btnw, btnh, 'calc_accuracy_btn',
+        self.calc_accuracy_btn = PushButton('Calculate Accuracy', btnw, btnh, 'calc_accuracy_btn',
                                             'Calculate accuracy from loaded files')
         self.save_all_plots_btn = PushButton('Save All Plots', btnw, btnh, 'save_all_plots_btn', 'Save all plot tabs')
+        self.calc_accuracy_btn.setMinimumWidth(0)
+        self.calc_accuracy_btn.setMaximumWidth(16777215)
+        self.calc_accuracy_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.save_all_plots_btn.setMinimumWidth(0)
+        self.save_all_plots_btn.setMaximumWidth(16777215)
+        self.save_all_plots_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        plot_btn_row = QtWidgets.QHBoxLayout()
+        plot_btn_row.addWidget(self.calc_accuracy_btn, 1)
+        plot_btn_row.addWidget(self.save_all_plots_btn, 1)
         
-        plot_btn_gb = GroupBox('Plot Data', BoxLayout([self.calc_accuracy_btn, self.save_all_plots_btn], 'v'),
+        plot_btn_gb = GroupBox('Plot Data', BoxLayout([plot_btn_row], 'v'),
                                False, False, 'plot_btn_gb')
         # plot_btn_gb.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.MinimumExpanding)
         
 
         
-        file_btn_layout = BoxLayout([ref_utm_gb, source_btn_gb, tide_btn_gb, file_mgmt_gb, plot_btn_gb], 'v', add_stretch=True)
         self.file_list = FileList()  # add file list with extended selection and icon size = (0,0) to avoid indent
         self.file_list.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
-        self.file_list.setMaximumWidth(350)  # Limit left panel width
-        file_gb = GroupBox('Sources', BoxLayout([self.file_list, file_btn_layout], 'h'), False, False, 'file_gb')
-        file_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.file_list.setFixedWidth(350)
+        file_sources_layout = BoxLayout([self.file_list, add_crosslines_layout], 'v')
+        file_gb = GroupBox('Crossline Data', file_sources_layout, False, False, 'file_gb')
+        file_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
 
         # add activity log widget
         self.log = TextEdit("background-color: lightgray", True, 'log')
-        self.log.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
+        self.log.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
         # self.log.setMaximumWidth(500)
 
         # self.log.setMaximumSize(350,50)
@@ -502,6 +554,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         update_log(self, '*** New swath accuracy processing log ***')
         log_gb = GroupBox('Activity Log', BoxLayout([self.log], 'v'), False, False, 'log_gb')
+        log_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
 
         # add progress bar for total file list and layout
         self.current_file_lbl = Label('Current File:')
@@ -519,7 +572,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.prog_layout.addLayout(calc_pb_layout)
 
         # set the left panel layout with file controls on top and log on bottom
-        self.left_layout = BoxLayout([file_gb, log_gb, self.prog_layout], 'v')
+        self.left_layout = BoxLayout([ref_utm_gb, tide_btn_gb, file_gb, plot_btn_gb, log_gb, self.prog_layout], 'v')
 
     def set_center_layout(self):  # set center layout with swath coverage plot
         # add figure instance and layout for swath accuracy plots
@@ -756,6 +809,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.show_u_plot_chk.setChecked(True)
             self.show_accuracy_legend_chk.setChecked(True)
             self.show_shaded_relief_chk.setChecked(True)
+            self.scale_loaded_depth_colors_chk.setChecked(True)
             self.show_special_order_chk.setChecked(False)
             self.show_order_1a_chk.setChecked(False)
             self.show_order_1b_chk.setChecked(False)
@@ -966,6 +1020,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.show_shaded_relief_chk = CheckBox('Show shaded relief', True, 'show_shaded_relief_chk',
                                                'Add shaded relief visualization to reference surface plots using '
                                                'multidirectional hillshade technique for enhanced terrain visualization.')
+        self.scale_loaded_depth_colors_chk = CheckBox('Scale colors to loaded data', True,
+                                                      'scale_loaded_depth_colors_chk',
+                                                      'Scale plot color ranges to currently displayed grid data '
+                                                      'instead of the full initially loaded range.')
 
         # Bathymetric order checkboxes
         self.show_special_order_chk = CheckBox('Show Special Order (±0.25+0.0075×depth m)', False, 'show_special_order_chk',
@@ -1012,6 +1070,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                        self.show_u_plot_chk,
                                        self.show_accuracy_legend_chk,
                                        self.show_shaded_relief_chk,
+                                       self.scale_loaded_depth_colors_chk,
                                        iho_controls_layout], 'v')  # self.IHO_lines_toggle_chk], 'v')
 
         toggle_gb = QtWidgets.QGroupBox('Plot options')
@@ -1242,7 +1301,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                               'Reset all filters to their default values')
         
         filter_buttons_layout = BoxLayout([self.save_filters_btn, self.load_last_filters_btn, self.default_filters_btn], 'h')
-        filter_buttons_gb = GroupBox('Filter Management', filter_buttons_layout, False, False, 'filter_buttons_gb')
+        self.filter_buttons_gb = GroupBox('Filter Settings', filter_buttons_layout, False, False, 'filter_buttons_gb')
 
         # set up tabs
         self.tabs = QtWidgets.QTabWidget()
@@ -1257,12 +1316,17 @@ class MainWindow(QtWidgets.QMainWindow):
                                                     'Reset all plot settings to their default values')
         
         plot_settings_buttons_layout = BoxLayout([self.save_plot_settings_btn, self.load_last_plot_settings_btn, self.default_plot_settings_btn], 'h')
-        plot_settings_buttons_gb = GroupBox('Plot Settings Management', plot_settings_buttons_layout, False, False, 'plot_settings_buttons_gb')
+        self.plot_settings_buttons_gb = GroupBox('Plot Settings', plot_settings_buttons_layout, False, False, 'plot_settings_buttons_gb')
+
+        program_settings_layout = BoxLayout([self.plot_settings_buttons_gb, self.filter_buttons_gb], 'v')
+        self.program_settings_gb = GroupBox('Program Settings', program_settings_layout, False, False, 'program_settings_gb')
+        # Insert below Activity Log and above progress info in the left panel.
+        self.left_layout.insertWidget(5, self.program_settings_gb)
 
         # set up tab 1: plot options
         self.tab1 = QtWidgets.QWidget()
         self.tab1.layout = BoxLayout([self.custom_info_gb, self.data_ref_gb, pt_param_gb,
-                                      self.plot_lim_gb, toggle_gb, self.flatten_mean_gb, plot_settings_buttons_gb], 'v')
+                                      self.plot_lim_gb, toggle_gb, self.flatten_mean_gb], 'v')
         self.tab1.layout.addStretch()
         self.tab1.setLayout(self.tab1.layout)
 
@@ -1272,7 +1336,7 @@ class MainWindow(QtWidgets.QMainWindow):
         label_in_prog.setStyleSheet("color: red")
         # self.tab2.layout = BoxLayout([label_in_prog, self.angle_gb, self.depth_ref_gb, self.depth_xline_gb,
         #                               self.bs_gb, self.slope_gb, self.density_gb], 'v')
-        self.tab2.layout = BoxLayout([tab2_ref_filter_gb, tab2_xline_filter_gb, self.pt_count_gb, self.bin_decimation_gb, filter_buttons_gb], 'v')
+        self.tab2.layout = BoxLayout([tab2_ref_filter_gb, tab2_xline_filter_gb, self.pt_count_gb, self.bin_decimation_gb], 'v')
 
         self.tab2.layout.addStretch()
         self.tab2.setLayout(self.tab2.layout)
