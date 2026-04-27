@@ -47,10 +47,8 @@ def setup(self):
 	# self.filenames = ['']  # initial file list
 	# self.input_dir = ''  # initial input dir
 	
-	# Load last used directory from config file
-	self.output_dir = load_last_directory()
-	if not self.output_dir or not os.path.exists(self.output_dir):
-		self.output_dir = os.getcwd()  # fallback to current working directory
+	# Start output directory from the app launch location
+	self.output_dir = os.getcwd()
 	
 	# self.clim_last_user = {'depth': [0, 1000], 'backscatter': [-50, -20]}
 	# self.last_cmode = 'depth'
