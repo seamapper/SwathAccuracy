@@ -81,12 +81,12 @@ The built exe is written to the **`dist`** folder. The build uses PyInstaller wi
 
 ### Basic Workflow
 
-1. **Load Reference Surface**: Use "Add Ref. Surface" to load a reference surface file (XYZ format in UTM projection)
-2. **Load Crosslines**: Use "Add Crosslines" to load crossline data files (.all, .kmall, or ASCII.txt formats)
-3. **Configure Filters**: Set up filters in the "Filter" tab to refine your analysis
-4. **Calculate Accuracy**: Click "Calc Accuracy" to process the data
-5. **Customize Plots**: Adjust plot settings in the "Plot" tab
-6. **Export Results**: Use "Save All Plots" or "Export All to GeoTIFF" to save your results
+1. **Load Reference Surface**: Use "Add Reference Surface" to load a reference surface file (XYZ format in UTM projection)
+2. **Load Optional Density/Tide**: Use "Add Density Surface" and/or "Add Tide" as needed (both support remove toggles after loading)
+3. **Load Crosslines**: Use "Add Crosslines" or "Add Directory" to load crossline data files (.all, .kmall, or ASCII.txt formats)
+4. **Configure Filters**: Set up filters in the "Filter" tab to refine your analysis
+5. **Calculate Accuracy**: Click "Calculate Accuracy" to process the data
+6. **Customize/Save**: Adjust plot settings and filters, then use "Save All Plots" or "Export All to GeoTIFF"
 
 ### Supported File Formats
 
@@ -121,6 +121,8 @@ SwathAccuracy/
 ```
 
 ## Version History
+
+- **2026.02**: Major GUI workflow updates: dedicated Reference/Density/Tide file fields with add/remove toggles, reorganized left-panel controls (Crossline Data/Tide/Plot Data/Program Settings), renamed controls, and new "Scale colors to loaded data" option for dynamic color scaling across depth/density/slope/uncertainty plots and tabs.
 
 - **2026.01**: Dark mode GUI (Fusion style + dark palette); versioned exe build (build_exe.py / build_exe.bat)
 - **2025.8**: Fix for save_all_plots import
