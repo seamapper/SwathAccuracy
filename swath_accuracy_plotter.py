@@ -92,6 +92,7 @@ from libs.swath_accuracy_lib import *
 class MainWindow(QtWidgets.QMainWindow):
 
     media_path = os.path.join(os.path.dirname(__file__), "media")
+    _pending_field_stylesheet = "QLineEdit { border: 2px solid #00ffff; }"
 
     def __init__(self, parent=None):
         print("MainWindow __init__ called")
@@ -172,7 +173,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.tide_unit_cbox.activated.connect(lambda: parse_tide(self, force_refresh=True))
         self.tide_unit_cbox.activated.connect(lambda: process_tide(self, unit_set_by_user=True))
         self.depth_mode_cbox.activated.connect(lambda: calc_accuracy(self, recalc_dz_only=True))
-        self.waterline_tb.returnPressed.connect(lambda: update_buttons(self, recalc_acc=True))
+        self._bind_parameter_textbox(
+            self.waterline_tb,
+            lambda _sender: update_buttons(self, recalc_acc=True)
+        )
         
         # connect filter management buttons
         self.save_filters_btn.clicked.connect(lambda: save_current_filters(self))
@@ -385,35 +389,74 @@ class MainWindow(QtWidgets.QMainWindow):
         
 
         for tb in tb_acc_map:
-            # lambda seems to not need _ for tb
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     calc_accuracy(self, recalc_bins_only=True))
+            self._bind_parameter_textbox(
+                tb,
+                lambda _sender: calc_accuracy(self, recalc_bins_only=True)
+            )
 
         for tb in tb_ref_map:
-            # lambda seems to not need _ for tb
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     refresh_plot(self, refresh_list=['ref'], sender=sender, set_active_tab=1))
-            # Add plot_ref_surf call for crossline coverage on reference surface tabs
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     plot_ref_surf(self))
-
+            self._bind_parameter_textbox(
+                tb,
+                lambda sender: refresh_plot(self, refresh_list=['ref'], sender=sender, set_active_tab=1),
+                include_ref_surface_plot=True
+            )
 
         for tb in tb_all_map:
-            # lambda seems to not need _ for tb
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     refresh_plot(self, sender=sender))
-            # Add plot_ref_surf call for crossline coverage on reference surface tabs
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     plot_ref_surf(self))
+            self._bind_parameter_textbox(
+                tb,
+                lambda sender: refresh_plot(self, sender=sender),
+                include_ref_surface_plot=True
+            )
 
         for tb in tb_recalc_bins_map:
-            # lambda seems to not need _ for tb
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     calc_accuracy(self, recalc_bins_only=True))
+            self._bind_parameter_textbox(
+                tb,
+                lambda _sender: calc_accuracy(self, recalc_bins_only=True)
+            )
 
         for tb in tb_recalc_dz_map:
-            tb.returnPressed.connect(lambda sender=tb.objectName():
-                                     calc_accuracy(self, recalc_dz_only=True))
+            self._bind_parameter_textbox(
+                tb,
+                lambda _sender: calc_accuracy(self, recalc_dz_only=True)
+            )
+
+    def _set_parameter_pending_state(self, textbox, is_pending):
+        """Apply/remove visual style for unapplied parameter edits."""
+        if textbox.property('default_stylesheet') is None:
+            textbox.setProperty('default_stylesheet', textbox.styleSheet())
+
+        textbox.setProperty('has_pending_edit', is_pending)
+        if is_pending:
+            textbox.setStyleSheet(self._pending_field_stylesheet)
+        else:
+            textbox.setStyleSheet(textbox.property('default_stylesheet') or "")
+
+    def _mark_parameter_pending(self, textbox):
+        self._set_parameter_pending_state(textbox, True)
+
+    def _apply_parameter_if_pending(self, textbox, apply_callback, include_ref_surface_plot=False):
+        """Commit parameter only when textbox has unapplied edits."""
+        if not textbox.property('has_pending_edit'):
+            return
+
+        sender = textbox.objectName()
+        self._set_parameter_pending_state(textbox, False)
+        apply_callback(sender)
+
+        if include_ref_surface_plot:
+            plot_ref_surf(self)
+
+    def _bind_parameter_textbox(self, textbox, apply_callback, include_ref_surface_plot=False):
+        """Bind pending visual state and commit-on-finish-edit behavior."""
+        textbox.textEdited.connect(lambda _text, tb=textbox: self._mark_parameter_pending(tb))
+        textbox.returnPressed.connect(
+            lambda tb=textbox, cb=apply_callback, include_plot=include_ref_surface_plot:
+            self._apply_parameter_if_pending(tb, cb, include_plot)
+        )
+        textbox.editingFinished.connect(
+            lambda tb=textbox, cb=apply_callback, include_plot=include_ref_surface_plot:
+            self._apply_parameter_if_pending(tb, cb, include_plot)
+        )
 
     def set_left_layout(self):
         btnh = 20  # height of file control button
@@ -558,8 +601,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # add progress bar for total file list and layout
         self.current_file_lbl = Label('Current File:')
-        self.current_outdir_lbl = Label('Current output directory:\n' + self.output_dir)
-        calc_pb_lbl = Label('Total Progress:')
         self.calc_pb = QtWidgets.QProgressBar()
         self.calc_pb.setGeometry(0, 0, 100, 30)
         self.calc_pb.setMaximum(100)  # this will update with number of files
@@ -567,8 +608,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.calc_pb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
         # self.calc_pb.setMaximumSize(300,30)
         # self.calc_pb.setMaximumWidth(500)
-        calc_pb_layout = BoxLayout([calc_pb_lbl, self.calc_pb], 'h')
-        self.prog_layout = BoxLayout([self.current_file_lbl, self.current_outdir_lbl], 'v')
+        calc_pb_layout = BoxLayout([self.calc_pb], 'h')
+        self.prog_layout = BoxLayout([self.current_file_lbl], 'v')
         self.prog_layout.addLayout(calc_pb_layout)
 
         # set the left panel layout with file controls on top and log on bottom
@@ -1110,15 +1151,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.max_depth_ref_tb = LineEdit('10000', 40, 20, 'max_depth_ref_tb', 'Max depth of the reference surface data')
         self.min_depth_ref_tb.setValidator(QDoubleValidator(0, float(self.max_depth_ref_tb.text()), 2))
         self.max_depth_ref_tb.setValidator(QDoubleValidator(float(self.min_depth_ref_tb.text()), np.inf, 2))
-        depth_ref_layout = BoxLayout([min_depth_ref_lbl, self.min_depth_ref_tb,
+        self.depth_ref_gb = QtWidgets.QCheckBox('Depth (m, ref. surf.)')
+        self.depth_ref_gb.setObjectName('depth_ref_gb')
+        depth_ref_layout = BoxLayout([self.depth_ref_gb, min_depth_ref_lbl, self.min_depth_ref_tb,
                                       max_depth_ref_lbl, self.max_depth_ref_tb], 'h', add_stretch=True)
-        self.depth_ref_gb = GroupBox('Depth (m, ref. surf.)', depth_ref_layout, True, False, 'depth_ref_gb')
-        self.depth_ref_gb.setToolTip('Hide reference surface data by depth (m, positive down).\n\n'
-                                     'Acceptable min/max fall within [0 inf].')
+        self.depth_ref_row = QtWidgets.QWidget()
+        self.depth_ref_row.setLayout(depth_ref_layout)
+        self.depth_ref_row.setToolTip('Hide reference surface data by depth (m, positive down).\n\n'
+                                      'Acceptable min/max fall within [0 inf].')
 
         # add slope calc and filtering options
-        slope_win_lbl = Label('Window (cells):', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
-        self.slope_win_cbox = ComboBox(['1x1', '3x3', '5x5', '7x7', '9x9'], 60, 20, 'slope_window_cbox',
+        slope_win_lbl = Label('Window:', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        self.slope_win_cbox = ComboBox(['1x1', '3x3', '5x5', '7x7', '9x9'], 50, 20, 'slope_window_cbox',
                                        'Select the ref. surface moving average window size for slope calculation')
         max_slope_lbl = Label('Max (deg):', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
         self.max_slope_tb = LineEdit('5', 40, 20, 'max_slope_tb',
@@ -1127,8 +1171,12 @@ class MainWindow(QtWidgets.QMainWindow):
                                      'of the reference depth grid after any averaging using the window size selected)')
         self.max_slope_tb.setValidator(QDoubleValidator(0, np.inf, 2))
 
-        slope_layout = BoxLayout([slope_win_lbl, self.slope_win_cbox, max_slope_lbl, self.max_slope_tb], 'h')
-        self.slope_gb = GroupBox('Slope', slope_layout, True, False, 'slope_win_gb')
+        self.slope_gb = QtWidgets.QCheckBox('Slope')
+        self.slope_gb.setObjectName('slope_gb')
+        slope_layout = BoxLayout([self.slope_gb, slope_win_lbl, self.slope_win_cbox, max_slope_lbl, self.max_slope_tb],
+                                 'h', add_stretch=True)
+        self.slope_row = QtWidgets.QWidget()
+        self.slope_row.setLayout(slope_layout)
 
         # ref surf sounding density filtering
         min_dens_lbl = Label('Min:', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
@@ -1136,8 +1184,11 @@ class MainWindow(QtWidgets.QMainWindow):
                                     'Set the min. reference surface sounding density allowed for crossline analysis)')
         self.min_dens_tb.setValidator(QDoubleValidator(0, np.inf, 2))
 
-        density_layout = BoxLayout([min_dens_lbl, self.min_dens_tb], 'h', add_stretch=True)
-        self.density_gb = GroupBox('Density (soundings/cell)', density_layout, True, False, 'density_gb')
+        self.density_gb = QtWidgets.QCheckBox('Density (soundings/cell)')
+        self.density_gb.setObjectName('density_gb')
+        density_layout = BoxLayout([self.density_gb, min_dens_lbl, self.min_dens_tb], 'h', add_stretch=True)
+        self.density_row = QtWidgets.QWidget()
+        self.density_row.setLayout(density_layout)
 
         # ref surf uncertainty filtering
         max_u_lbl = Label('Max:', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
@@ -1145,12 +1196,15 @@ class MainWindow(QtWidgets.QMainWindow):
                                  'Set the max. reference surface uncertainty allowed for crossline analysis)')
         self.max_u_tb.setValidator(QDoubleValidator(0, np.inf, 2))
 
-        uncertainty_layout = BoxLayout([max_u_lbl, self.max_u_tb], 'h', add_stretch=True)
-        self.uncertainty_gb = GroupBox('Uncertainty (m)', uncertainty_layout, True, False, 'uncertainty_gb')
+        self.uncertainty_gb = QtWidgets.QCheckBox('Uncertainty (m)')
+        self.uncertainty_gb.setObjectName('uncertainty_gb')
+        uncertainty_layout = BoxLayout([self.uncertainty_gb, max_u_lbl, self.max_u_tb], 'h', add_stretch=True)
+        self.uncertainty_row = QtWidgets.QWidget()
+        self.uncertainty_row.setLayout(uncertainty_layout)
 
         # set up layout and groupbox for tabs
-        tab2_ref_filter_layout = BoxLayout([self.depth_ref_gb, self.uncertainty_gb,
-                                            self.density_gb, self.slope_gb], 'v')
+        tab2_ref_filter_layout = BoxLayout([self.depth_ref_row, self.uncertainty_row,
+                                            self.density_row, self.slope_row], 'v')
         tab2_ref_filter_gb = GroupBox('Reference surface', tab2_ref_filter_layout, False, False, 'tab2_ref_filter_gb')
 
         # TAB 2: FILTER OPTIONS: ACCURACY CROSSLINES
@@ -1161,12 +1215,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.max_depth_xline_tb = LineEdit('10000', 40, 20, 'max_depth_tb', 'Max depth of the crossline data')
         self.min_depth_xline_tb.setValidator(QDoubleValidator(0, float(self.max_depth_xline_tb.text()), 2))
         self.max_depth_xline_tb.setValidator(QDoubleValidator(float(self.min_depth_xline_tb.text()), np.inf, 2))
-        depth_xline_layout = BoxLayout([min_depth_xline_lbl, self.min_depth_xline_tb,
-                                        max_depth_xline_lbl, self.max_depth_xline_tb], 'h')
-        depth_xline_layout.addStretch()
-        self.depth_xline_gb = GroupBox('Depth (m, crosslines)', depth_xline_layout, True, False, 'depth_xline_gb')
-        self.depth_xline_gb.setToolTip('Hide crossline data by depth (m, positive down).\n\n'
-                                       'Acceptable min/max fall within [0 inf].')
+        self.depth_xline_gb = QtWidgets.QCheckBox('Depth (m, crosslines)')
+        self.depth_xline_gb.setObjectName('depth_xline_gb')
+        depth_xline_layout = BoxLayout([self.depth_xline_gb, min_depth_xline_lbl, self.min_depth_xline_tb,
+                                        max_depth_xline_lbl, self.max_depth_xline_tb], 'h', add_stretch=True)
+        self.depth_xline_row = QtWidgets.QWidget()
+        self.depth_xline_row.setLayout(depth_xline_layout)
+        self.depth_xline_row.setToolTip('Hide crossline data by depth (m, positive down).\n\n'
+                                        'Acceptable min/max fall within [0 inf].')
 
         # add custom swath angle limits (-port, +stbd on [-inf, inf]; not [0, inf] like swath coverage plotter)
         min_angle_xline_lbl = Label('Min:', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
@@ -1182,11 +1238,16 @@ class MainWindow(QtWidgets.QMainWindow):
                                         max_angle_xline_lbl, self.max_angle_xline_tb],
                                        'h', add_stretch=True)
 
-        self.angle_xline_gb = GroupBox('Angle (deg)', angle_xline_layout, True, False, 'angle_xline_gb')
-        self.angle_xline_gb.setToolTip('Hide soundings based on nominal swath angles calculated from depths and '
-                                 'acrosstrack distances; these swath angles may differ slightly from RX beam '
-                                 'angles (w.r.t. RX array) due to installation, attitude, and refraction.\n\n'
-                                 'Angles are treated as negative to port and positive to starboard.')
+        self.angle_xline_gb = QtWidgets.QCheckBox('Angle (deg)')
+        self.angle_xline_gb.setObjectName('angle_xline_gb')
+        angle_xline_row_layout = BoxLayout([self.angle_xline_gb, min_angle_xline_lbl, self.min_angle_xline_tb,
+                                            max_angle_xline_lbl, self.max_angle_xline_tb], 'h', add_stretch=True)
+        self.angle_xline_row = QtWidgets.QWidget()
+        self.angle_xline_row.setLayout(angle_xline_row_layout)
+        self.angle_xline_row.setToolTip('Hide soundings based on nominal swath angles calculated from depths and '
+                                        'acrosstrack distances; these swath angles may differ slightly from RX beam '
+                                        'angles (w.r.t. RX array) due to installation, attitude, and refraction.\n\n'
+                                        'Angles are treated as negative to port and positive to starboard.')
 
         # add custom reported backscatter limits
         min_bs_xline_lbl = Label('Min:', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
@@ -1201,11 +1262,14 @@ class MainWindow(QtWidgets.QMainWindow):
                                   'include positive values to accommodate anomalous reported backscatter data')
         self.min_bs_xline_tb.setValidator(QDoubleValidator(-1 * np.inf, float(self.max_bs_xline_tb.text()), 2))
         self.max_bs_xline_tb.setValidator(QDoubleValidator(float(self.min_bs_xline_tb.text()), np.inf, 2))
-        bs_xline_layout = BoxLayout([min_bs_xline_lbl, self.min_bs_xline_tb,
-                               max_bs_xline_lbl, self.max_bs_xline_tb], 'h', add_stretch=True)
-        self.bs_xline_gb = GroupBox('Backscatter (dB)', bs_xline_layout, True, False, 'bs_xline_gb')
-        self.bs_xline_gb.setToolTip('Hide data by reported backscatter amplitude (dB).\n\n'
-                                    'Acceptable min/max fall within [-inf inf] to accommodate anomalous data >0.')
+        self.bs_xline_gb = QtWidgets.QCheckBox('Backscatter (dB)')
+        self.bs_xline_gb.setObjectName('bs_xline_gb')
+        bs_xline_layout = BoxLayout([self.bs_xline_gb, min_bs_xline_lbl, self.min_bs_xline_tb,
+                                     max_bs_xline_lbl, self.max_bs_xline_tb], 'h', add_stretch=True)
+        self.bs_xline_row = QtWidgets.QWidget()
+        self.bs_xline_row.setLayout(bs_xline_layout)
+        self.bs_xline_row.setToolTip('Hide data by reported backscatter amplitude (dB).\n\n'
+                                     'Acceptable min/max fall within [-inf inf] to accommodate anomalous data >0.')
 
         # add depth mode filter for crossline
         # self.depth_mode_list = ['Very Shallow', 'Shallow', 'Medium', 'Deep', 'Deeper',
@@ -1213,9 +1277,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.depth_mode_list = ['None']
         self.depth_mode_cbox = ComboBox(self.depth_mode_list, 80, 20, 'depth_mode_cbox',
                                         'Filter crosslines by depth mode(s) found in file(s)')
-        depth_mode_layout = BoxLayout([Label('Available mode(s):', 50, 20,'depth_mode_lbl',
-                                             (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)), self.depth_mode_cbox], 'h')
-        self.depth_mode_gb = GroupBox('Depth mode', depth_mode_layout, True, False, 'depth_mode_gb')
+        self.depth_mode_gb = QtWidgets.QCheckBox('Depth mode')
+        self.depth_mode_gb.setObjectName('depth_mode_gb')
+        depth_mode_layout = BoxLayout([self.depth_mode_gb,
+                                       Label('Available Modes:', 50, 20,'depth_mode_lbl',
+                                             (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)),
+                                       self.depth_mode_cbox], 'h', add_stretch=True)
+        self.depth_mode_row = QtWidgets.QWidget()
+        self.depth_mode_row.setLayout(depth_mode_layout)
 
 
         # add minimum sounding count for binning
@@ -1230,9 +1299,12 @@ class MainWindow(QtWidgets.QMainWindow):
                                   'Set the maximum absolute depth difference in meters (>0)')
         self.max_dz_tb.setValidator(QDoubleValidator(0.001, np.inf, 3))
         
-        dz_abs_layout = BoxLayout([max_dz_lbl, self.max_dz_tb], 'h', add_stretch=True)
-        self.dz_abs_gb = GroupBox('Depth difference (m)', dz_abs_layout, True, False, 'dz_abs_gb')
-        self.dz_abs_gb.setToolTip('Hide crossline data by absolute depth difference from reference surface (>0 m)')
+        self.dz_abs_gb = QtWidgets.QCheckBox('Depth difference (m)')
+        self.dz_abs_gb.setObjectName('dz_abs_gb')
+        dz_abs_layout = BoxLayout([self.dz_abs_gb, max_dz_lbl, self.max_dz_tb], 'h', add_stretch=True)
+        self.dz_abs_row = QtWidgets.QWidget()
+        self.dz_abs_row.setLayout(dz_abs_layout)
+        self.dz_abs_row.setToolTip('Hide crossline data by absolute depth difference from reference surface (>0 m)')
 
         # add separate percentage of water depth filtering
         max_dz_wd_lbl = Label('Max (%WD):', width=50, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
@@ -1240,12 +1312,18 @@ class MainWindow(QtWidgets.QMainWindow):
                                      'Set the maximum depth difference as percentage of water depth (1-99%)')
         self.max_dz_wd_tb.setValidator(QDoubleValidator(1, 99, 0))
         
-        dz_pct_layout = BoxLayout([max_dz_wd_lbl, self.max_dz_wd_tb], 'h', add_stretch=True)
-        self.dz_pct_gb = GroupBox('Depth difference (%WD)', dz_pct_layout, True, False, 'dz_pct_gb')
-        self.dz_pct_gb.setToolTip('Hide crossline data by depth difference as percentage of water depth (1-99%)')
+        self.dz_pct_gb = QtWidgets.QCheckBox('Depth difference (%WD)')
+        self.dz_pct_gb.setObjectName('dz_pct_gb')
+        dz_pct_layout = BoxLayout([self.dz_pct_gb, max_dz_wd_lbl, self.max_dz_wd_tb], 'h', add_stretch=True)
+        self.dz_pct_row = QtWidgets.QWidget()
+        self.dz_pct_row.setLayout(dz_pct_layout)
+        self.dz_pct_row.setToolTip('Hide crossline data by depth difference as percentage of water depth (1-99%)')
 
-        bin_count_layout = BoxLayout([min_bin_count_lbl, self.min_bin_count_tb], 'h', add_stretch=True)
-        self.bin_count_gb = GroupBox('Bin count (soundings/bin)', bin_count_layout, True, True, 'bin_count_gb')
+        self.bin_count_gb = QtWidgets.QCheckBox('Bin count (soundings/bin)')
+        self.bin_count_gb.setObjectName('bin_count_gb')
+        bin_count_layout = BoxLayout([self.bin_count_gb, min_bin_count_lbl, self.min_bin_count_tb], 'h', add_stretch=True)
+        self.bin_count_row = QtWidgets.QWidget()
+        self.bin_count_row.setLayout(bin_count_layout)
 
         # add plotted point max count and decimation factor control in checkable groupbox
         max_count_lbl = Label('Max. plotted points (0-inf):', width=140, alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
@@ -1286,8 +1364,8 @@ class MainWindow(QtWidgets.QMainWindow):
                                     'In any case, large sounding counts may significantly slow the plotting process.')
 
         # set up layout and groupbox for tabs
-        tab2_xline_filter_layout = BoxLayout([self.angle_xline_gb, self.depth_xline_gb, self.dz_abs_gb, self.dz_pct_gb,
-                                              self.bs_xline_gb, self.depth_mode_gb, self.bin_count_gb], 'v')
+        tab2_xline_filter_layout = BoxLayout([self.angle_xline_row, self.depth_xline_row, self.dz_abs_row, self.dz_pct_row,
+                                              self.bs_xline_row, self.depth_mode_row, self.bin_count_row], 'v')
         tab2_xline_filter_gb = GroupBox('Crosslines', tab2_xline_filter_layout,
                                         False, True, 'tab2_xline_filter_gb')
         tab2_xline_filter_gb.setEnabled(True)
@@ -1299,9 +1377,17 @@ class MainWindow(QtWidgets.QMainWindow):
                                                 'Load the last saved set of filter settings')
         self.default_filters_btn = PushButton('Restore Filters', 95, 25, 'default_filters_btn',
                                               'Reset all filters to their default values')
-        
-        filter_buttons_layout = BoxLayout([self.save_filters_btn, self.load_last_filters_btn, self.default_filters_btn], 'h')
+        for btn in [self.save_filters_btn, self.load_last_filters_btn, self.default_filters_btn]:
+            btn.setMinimumWidth(0)
+            btn.setMaximumWidth(16777215)
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+        filter_buttons_layout = QtWidgets.QHBoxLayout()
+        filter_buttons_layout.addWidget(self.save_filters_btn, 1)
+        filter_buttons_layout.addWidget(self.load_last_filters_btn, 1)
+        filter_buttons_layout.addWidget(self.default_filters_btn, 1)
         self.filter_buttons_gb = GroupBox('Filter Settings', filter_buttons_layout, False, False, 'filter_buttons_gb')
+        self.filter_buttons_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
 
         # set up tabs
         self.tabs = QtWidgets.QTabWidget()
@@ -1314,14 +1400,22 @@ class MainWindow(QtWidgets.QMainWindow):
                                                       'Load the last saved set of plot settings')
         self.default_plot_settings_btn = PushButton('Restore Defaults', 95, 25, 'default_plot_settings_btn',
                                                     'Reset all plot settings to their default values')
-        
-        plot_settings_buttons_layout = BoxLayout([self.save_plot_settings_btn, self.load_last_plot_settings_btn, self.default_plot_settings_btn], 'h')
+        for btn in [self.save_plot_settings_btn, self.load_last_plot_settings_btn, self.default_plot_settings_btn]:
+            btn.setMinimumWidth(0)
+            btn.setMaximumWidth(16777215)
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+        plot_settings_buttons_layout = QtWidgets.QHBoxLayout()
+        plot_settings_buttons_layout.addWidget(self.save_plot_settings_btn, 1)
+        plot_settings_buttons_layout.addWidget(self.load_last_plot_settings_btn, 1)
+        plot_settings_buttons_layout.addWidget(self.default_plot_settings_btn, 1)
         self.plot_settings_buttons_gb = GroupBox('Plot Settings', plot_settings_buttons_layout, False, False, 'plot_settings_buttons_gb')
+        self.plot_settings_buttons_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
 
         program_settings_layout = BoxLayout([self.plot_settings_buttons_gb, self.filter_buttons_gb], 'v')
         self.program_settings_gb = GroupBox('Program Settings', program_settings_layout, False, False, 'program_settings_gb')
-        # Insert below Activity Log and above progress info in the left panel.
-        self.left_layout.insertWidget(5, self.program_settings_gb)
+        # Insert below Plot Data and above Activity Log in the left panel.
+        self.left_layout.insertWidget(4, self.program_settings_gb)
 
         # set up tab 1: plot options
         self.tab1 = QtWidgets.QWidget()

@@ -1292,12 +1292,26 @@ def parse_ref_dens(self):
 
 def update_ref_slope(self):
 	# update slope and plot after changing slope calc params
+	# If no reference surface is loaded yet, there is nothing to update.
+	if not hasattr(self, 'ref') or not isinstance(self.ref, dict):
+		return
+	if not all(k in self.ref for k in ['e', 'n', 'z', 'z_grid']) or len(self.ref.get('z', [])) == 0:
+		return
+
 	calc_ref_slope(self)
 	refresh_plot(self, refresh_list=['ref'], sender='update_ref_slope')
 
 
 def calc_ref_slope(self):
 	# calculate representative maximum slope for each node in reference grid
+	if not hasattr(self, 'ref') or not isinstance(self.ref, dict):
+		return
+	required_keys = ['e', 'n', 'z', 'z_grid']
+	if not all(k in self.ref for k in required_keys):
+		return
+	if not hasattr(self, 'ref_cell_size') or self.ref_cell_size is None:
+		return
+
 	# 0. make z grid with nearest neighbor interpolation (so empty cells and edges do not cause NaN gradients; this is
 	# for gradient/slope calculation only, as these cells will be masked later to match shape of depth grid)
 	print('in calc_ref_slope')

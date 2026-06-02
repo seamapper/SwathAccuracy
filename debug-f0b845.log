@@ -1,0 +1,1 @@
+{"sessionId": "f0b845", "runId": "pre-fix", "hypothesisId": "H1", "location": "performance_mixin.py:_update_performance_total_test_time", "message": "Ping time unavailable, clearing total test time", "data": {"ping_time_sec": null}, "timestamp": 1777663695772}
