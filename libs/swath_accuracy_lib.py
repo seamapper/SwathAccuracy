@@ -684,6 +684,7 @@ def filter_xline(self, print_updates=True):
 	angle_idx = np.ones(idx_shape)  # inx of beam angle
 	depth_idx = np.ones(idx_shape)  # idx of depth final (meters) after tide and z reference adjustments
 	bs_idx = np.ones(idx_shape)  # idz of reported backscatter (dB)
+	min_ping_soundings_idx = np.ones(idx_shape)  # idx of pings with enough valid soundings
 	dz_ref_idx = np.ones(idx_shape)  # idx of dz from ref (meters)
 	dz_ref_wd_idx = np.ones(idx_shape)  # idx of dz from ref (% WD)
 	depth_mode_idx = np.ones(idx_shape)  # idx of depth mode matching combo box
@@ -726,6 +727,25 @@ def filter_xline(self, print_updates=True):
 		bs_idx = np.logical_and(np.asarray(self.xline['bs']) >= lims[0],
 								np.asarray(self.xline['bs']) <= lims[1])
 
+	if hasattr(self, 'min_ping_soundings_gb') and self.min_ping_soundings_gb.isChecked():
+		min_ping_soundings = int(float(self.min_ping_soundings_tb.text()))
+		if 'fname' in self.xline and 'datetime' in self.xline:
+			# Keep one ping key per sounding (fname, datetime) to match filter index shape.
+			# Normalize to strings so np.unique does not try to sort mixed datetime/str objects.
+			ping_keys = np.asarray(
+				[f"{fname}|{str(dt)}" for fname, dt in zip(self.xline['fname'], self.xline['datetime'])],
+				dtype=str
+			)
+			valid_ping_keys = ping_keys[real_idx]
+			unique_ping_keys, valid_ping_inverse, valid_ping_counts = np.unique(
+				valid_ping_keys, return_inverse=True, return_counts=True
+			)
+			valid_ping_mask = valid_ping_counts[valid_ping_inverse] >= min_ping_soundings
+			min_ping_soundings_idx = np.zeros(idx_shape, dtype=bool)
+			min_ping_soundings_idx[real_idx] = valid_ping_mask
+		else:
+			update_log(self, 'Skipping min-soundings-per-ping filter (ping identifiers unavailable).')
+
 	if self.depth_mode_gb.isChecked():  # get idx satisfying current depth mode filter
 		depth_mode_filter = self.depth_mode_cbox.currentText().strip().lower()
 		update_log(self, 'Crosslines will be filtered by depth mode: ' + depth_mode_filter)
@@ -740,7 +760,7 @@ def filter_xline(self, print_updates=True):
 	try:
 		# Convert all indices to boolean arrays and ensure they have the same shape
 		filter_arrays = []
-		for idx_array in [angle_idx, depth_idx, bs_idx, dz_abs_idx, dz_pct_idx, depth_mode_idx]:
+		for idx_array in [angle_idx, depth_idx, bs_idx, min_ping_soundings_idx, dz_abs_idx, dz_pct_idx, depth_mode_idx]:
 			if idx_array is not None:
 				# Convert to numpy array and ensure boolean type
 				bool_array = np.asarray(idx_array, dtype=bool)
@@ -3095,6 +3115,76 @@ def plot_soundings_per_bin(self):
     print("DEBUG: plot_soundings_per_bin completed")
 
 
+def plot_ping_soundings_distribution(self):
+	"""Plot histogram of valid sounding counts per ping."""
+	print("DEBUG: plot_ping_soundings_distribution called")
+
+	# Clear figure regardless, so stale content is removed.
+	self.ping_soundings_figure.clear()
+	ax = self.ping_soundings_figure.add_subplot(111)
+
+	if not hasattr(self, 'xline') or not self.xline or 'fname' not in self.xline or 'datetime' not in self.xline:
+		ax.text(0.5, 0.5, 'No crossline data loaded', ha='center', va='center', transform=ax.transAxes)
+		ax.set_title('Valid Soundings per Ping')
+		self.ping_soundings_canvas.draw()
+		return
+
+	# Valid soundings are non-NaN in z_final when available; otherwise non-NaN in z.
+	if 'z_final' in self.xline:
+		valid_idx = ~np.isnan(np.asarray(self.xline['z_final']))
+	elif 'z' in self.xline:
+		valid_idx = ~np.isnan(np.asarray(self.xline['z']))
+	else:
+		ax.text(0.5, 0.5, 'No sounding depth data available', ha='center', va='center', transform=ax.transAxes)
+		ax.set_title('Valid Soundings per Ping')
+		self.ping_soundings_canvas.draw()
+		return
+
+	ping_keys = np.asarray(
+		[f"{fname}|{str(dt)}" for fname, dt in zip(self.xline['fname'], self.xline['datetime'])],
+		dtype=str
+	)
+	valid_ping_keys = ping_keys[valid_idx]
+
+	if valid_ping_keys.size == 0:
+		ax.text(0.5, 0.5, 'No valid soundings available', ha='center', va='center', transform=ax.transAxes)
+		ax.set_title('Valid Soundings per Ping')
+		self.ping_soundings_canvas.draw()
+		return
+
+	_, ping_counts = np.unique(valid_ping_keys, return_counts=True)
+
+	max_count = int(np.max(ping_counts))
+	n_bins = min(50, max_count) if max_count > 1 else 1
+	ax.hist(ping_counts, bins=n_bins, color='mediumpurple', edgecolor='black', alpha=0.75)
+
+	# Show the minimum-soundings-per-ping filter threshold when enabled.
+	if hasattr(self, 'min_ping_soundings_gb') and self.min_ping_soundings_gb.isChecked():
+		try:
+			min_ping_soundings = float(self.min_ping_soundings_tb.text())
+			ax.axvline(min_ping_soundings, color='red', linestyle='--', linewidth=2,
+					   label=f'Min soundings/ping ({min_ping_soundings:g})')
+			ax.legend(loc='upper right', fontsize=9)
+		except (ValueError, AttributeError):
+			pass
+
+	ax.set_xlabel('Valid Soundings per Ping')
+	ax.set_ylabel('Number of Pings')
+	ax.set_title('Valid Soundings per Ping Distribution')
+	ax.grid(True, alpha=0.3)
+
+	stats_text = (
+		f'Total pings: {len(ping_counts):,}\n'
+		f'Total valid soundings: {np.sum(ping_counts):,}\n'
+		f'Min/Mean/Max: {np.min(ping_counts)} / {np.mean(ping_counts):.1f} / {np.max(ping_counts)}'
+	)
+	ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, va='top',
+			bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+	self.ping_soundings_canvas.draw()
+	print("DEBUG: plot_ping_soundings_distribution completed")
+
+
 def plot_bathymetric_orders(self):
     """
     Plot bathymetric order accuracy limits on the accuracy plot.
@@ -3476,6 +3566,8 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 		
 		# Plot soundings per bin
 		plot_soundings_per_bin(self)
+		# Plot valid soundings per ping distribution
+		plot_ping_soundings_distribution(self)
 
 	# Add optional legends on both Accuracy tab axes.
 	if hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked():
@@ -4041,10 +4133,12 @@ def add_xline_proc_text(self):
 	angle_fil = ['None', self.min_angle_xline_tb.text() + ' to ' + self.max_angle_xline_tb.text() + '\u00b0']
 	bs_fil = ['None', ('+' if float(self.min_bs_xline_tb.text()) > 0 else '') + self.min_bs_xline_tb.text() + ' to ' +
 			  ('+' if float(self.max_bs_xline_tb.text()) > 0 else '') + self.max_bs_xline_tb.text() + ' dB']
+	min_ping_soundings_fil = ['None', self.min_ping_soundings_tb.text() + ' soundings/ping']
 
 	fil_dict = {'Angle filter: ': angle_fil[self.angle_xline_gb.isChecked()],
 				'Depth filter (crossline): ': depth_fil_xline[self.depth_xline_gb.isChecked()],
 				'Backscatter filter: ': bs_fil[self.bs_xline_gb.isChecked()],
+				'Min soundings/ping: ': min_ping_soundings_fil[getattr(self, 'min_ping_soundings_gb', None) is not None and self.min_ping_soundings_gb.isChecked()],
 				'Max. diff. (m):': dz_abs_fil[hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked()],
 				'Max. diff. (%WD):': dz_pct_fil[hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked()]}
 
@@ -4179,6 +4273,7 @@ def save_all_plots(self):
 		('density', self.density_final_figure),
 		('slope', self.slope_final_figure),
 		('soundings', self.soundings_figure),
+		('valid_soundings', self.ping_soundings_figure),
 		('tide', self.tide_figure)
 	]
 	
@@ -4698,6 +4793,7 @@ def save_current_filters(self):
 			'xline_angle_max': self.max_angle_xline_tb.text(),
 			'xline_bs_min': self.min_bs_xline_tb.text(),
 			'xline_bs_max': self.max_bs_xline_tb.text(),
+			'xline_min_ping_soundings': self.min_ping_soundings_tb.text(),
 			'xline_dz_max': self.max_dz_tb.text(),
 			'xline_dz_wd_max': self.max_dz_wd_tb.text(),
 			'xline_bin_count_min': self.min_bin_count_tb.text(),
@@ -4711,6 +4807,7 @@ def save_current_filters(self):
 			'xline_depth_enabled': self.depth_xline_gb.isChecked(),
 			'xline_angle_enabled': self.angle_xline_gb.isChecked(),
 			'xline_bs_enabled': self.bs_xline_gb.isChecked(),
+			'xline_min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
 			'xline_dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 			'xline_dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
 			'xline_depth_mode_enabled': self.depth_mode_gb.isChecked(),
@@ -4783,6 +4880,8 @@ def load_last_filters(self):
 			'bs_enabled': self.bs_xline_gb.isChecked(),
 			'bs_min': self.min_bs_xline_tb.text(),
 			'bs_max': self.max_bs_xline_tb.text(),
+			'min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
+			'min_ping_soundings': self.min_ping_soundings_tb.text(),
 			'dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 			'dz_max': self.max_dz_tb.text(),
 			'dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
@@ -4813,6 +4912,7 @@ def load_last_filters(self):
 		self.max_angle_xline_tb.setText(filter_settings.get('xline_angle_max', '75'))
 		self.min_bs_xline_tb.setText(filter_settings.get('xline_bs_min', '-50'))
 		self.max_bs_xline_tb.setText(filter_settings.get('xline_bs_max', '0'))
+		self.min_ping_soundings_tb.setText(filter_settings.get('xline_min_ping_soundings', '5'))
 		self.max_dz_tb.setText(filter_settings.get('xline_dz_max', '10'))
 		self.max_dz_wd_tb.setText(filter_settings.get('xline_dz_wd_max', '5'))
 		self.min_bin_count_tb.setText(filter_settings.get('xline_bin_count_min', '10'))
@@ -4839,6 +4939,7 @@ def load_last_filters(self):
 		self.depth_xline_gb.setChecked(filter_settings.get('xline_depth_enabled', True))
 		self.angle_xline_gb.setChecked(filter_settings.get('xline_angle_enabled', True))
 		self.bs_xline_gb.setChecked(filter_settings.get('xline_bs_enabled', True))
+		self.min_ping_soundings_gb.setChecked(filter_settings.get('xline_min_ping_soundings_enabled', False))
 		if hasattr(self, 'dz_abs_gb'):
 			self.dz_abs_gb.setChecked(filter_settings.get('xline_dz_abs_enabled', True))
 		if hasattr(self, 'dz_pct_gb'):
@@ -4905,6 +5006,8 @@ def load_default_filters(self):
 			'bs_enabled': self.bs_xline_gb.isChecked(),
 			'bs_min': self.min_bs_xline_tb.text(),
 			'bs_max': self.max_bs_xline_tb.text(),
+			'min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
+			'min_ping_soundings': self.min_ping_soundings_tb.text(),
 			'dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 			'dz_max': self.max_dz_tb.text(),
 			'dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
@@ -4930,6 +5033,7 @@ def load_default_filters(self):
 		self.max_angle_xline_tb.setText('75')
 		self.min_bs_xline_tb.setText('-50')
 		self.max_bs_xline_tb.setText('0')
+		self.min_ping_soundings_tb.setText('5')
 		self.max_dz_tb.setText('10')
 		self.max_dz_wd_tb.setText('5')
 		self.min_bin_count_tb.setText('10')
@@ -4951,6 +5055,7 @@ def load_default_filters(self):
 		self.depth_xline_gb.setChecked(False)
 		self.angle_xline_gb.setChecked(False)
 		self.bs_xline_gb.setChecked(False)
+		self.min_ping_soundings_gb.setChecked(False)
 		if hasattr(self, 'dz_abs_gb'):
 			self.dz_abs_gb.setChecked(False)
 		if hasattr(self, 'dz_pct_gb'):
@@ -5125,6 +5230,8 @@ def save_session(self):
 				'xline_bs_enabled': self.bs_xline_gb.isChecked(),
 				'xline_bs_min': self.min_bs_xline_tb.text(),
 				'xline_bs_max': self.max_bs_xline_tb.text(),
+				'xline_min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
+				'xline_min_ping_soundings': self.min_ping_soundings_tb.text(),
 				'xline_dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 				'xline_dz_max': self.max_dz_tb.text(),
 				'xline_dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
@@ -5323,6 +5430,8 @@ def load_session(self):
 		self.bs_xline_gb.setChecked(filter_settings.get('xline_bs_enabled', False))
 		self.min_bs_xline_tb.setText(filter_settings.get('xline_bs_min', '-50'))
 		self.max_bs_xline_tb.setText(filter_settings.get('xline_bs_max', '0'))
+		self.min_ping_soundings_gb.setChecked(filter_settings.get('xline_min_ping_soundings_enabled', False))
+		self.min_ping_soundings_tb.setText(filter_settings.get('xline_min_ping_soundings', '5'))
 		if hasattr(self, 'dz_abs_gb'):
 			self.dz_abs_gb.setChecked(filter_settings.get('xline_dz_abs_enabled', False))
 		self.max_dz_tb.setText(filter_settings.get('xline_dz_max', '10'))

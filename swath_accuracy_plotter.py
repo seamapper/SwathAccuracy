@@ -289,6 +289,7 @@ class MainWindow(QtWidgets.QMainWindow):
                               self.max_angle_xline_tb,
                               self.max_bs_xline_tb,
                               self.min_bs_xline_tb,
+                              self.min_ping_soundings_tb,
                               self.max_dz_tb,
                               self.max_dz_wd_tb,
                               self.min_bin_count_tb,
@@ -303,6 +304,7 @@ class MainWindow(QtWidgets.QMainWindow):
         gb_recalc_bins_map = [self.depth_xline_gb,
                               self.angle_xline_gb,
                               self.bs_xline_gb,
+                              self.min_ping_soundings_gb,
                               self.dz_abs_gb,
                               self.dz_pct_gb,
                               self.depth_mode_gb,
@@ -743,6 +745,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.soundings_layout = BoxLayout([self.soundings_toolbar, self.soundings_canvas], 'v')
         self.plot_tab_soundings.setLayout(self.soundings_layout)
 
+        # NEW: set up tab 9: Ping soundings distribution
+        self.plot_tab_ping_soundings = QtWidgets.QWidget()
+        self.ping_soundings_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
+        self.ping_soundings_canvas = FigureCanvas(self.ping_soundings_figure)
+        self.ping_soundings_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.ping_soundings_toolbar = NavigationToolbar(self.ping_soundings_canvas, self)
+        self.ping_soundings_layout = BoxLayout([self.ping_soundings_toolbar, self.ping_soundings_canvas], 'v')
+        self.plot_tab_ping_soundings.setLayout(self.ping_soundings_layout)
+
 
 
         # add tabs to tab layout
@@ -753,7 +764,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.plot_tabs.addTab(self.plot_tab_uncertainty_final, 'Uncertainty')
         self.plot_tabs.addTab(self.plot_tab_density_final, 'Density')
         self.plot_tabs.addTab(self.plot_tab_slope_final, 'Slope')
-        self.plot_tabs.addTab(self.plot_tab_soundings, 'Soundings')
+        self.plot_tabs.addTab(self.plot_tab_soundings, 'Soundings per Bin')
+        self.plot_tabs.addTab(self.plot_tab_ping_soundings, 'Valid Soundings')
         self.plot_tabs.addTab(self.plot_tab4, 'Tide')
 
         self.center_layout = BoxLayout([self.plot_tabs], 'v')
@@ -777,6 +789,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.max_angle_xline_tb.setText('75')
             self.min_bs_xline_tb.setText('-50')
             self.max_bs_xline_tb.setText('0')
+            self.min_ping_soundings_tb.setText('5')
             self.max_dz_tb.setText('10')
             self.max_dz_wd_tb.setText('5')
             self.min_bin_count_tb.setText('10')
@@ -794,6 +807,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.depth_xline_gb.setChecked(False)
             self.angle_xline_gb.setChecked(False)
             self.bs_xline_gb.setChecked(False)
+            self.min_ping_soundings_gb.setChecked(False)
             if hasattr(self, 'dz_abs_gb'):
                 self.dz_abs_gb.setChecked(False)
             if hasattr(self, 'dz_pct_gb'):
@@ -1271,6 +1285,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.bs_xline_row.setToolTip('Hide data by reported backscatter amplitude (dB).\n\n'
                                      'Acceptable min/max fall within [-inf inf] to accommodate anomalous data >0.')
 
+        # remove pings with too few valid soundings
+        min_ping_soundings_lbl = Label('Min:', width=50,
+                                       alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        self.min_ping_soundings_tb = LineEdit('5', 40, 20, 'min_ping_soundings_tb',
+                                              'Minimum number of valid soundings required per ping; '
+                                              'all soundings from pings below this count are excluded')
+        self.min_ping_soundings_tb.setValidator(QIntValidator(1, 100000))
+        self.min_ping_soundings_gb = QtWidgets.QCheckBox('Min soundings per ping')
+        self.min_ping_soundings_gb.setObjectName('min_ping_soundings_gb')
+        min_ping_soundings_layout = BoxLayout([self.min_ping_soundings_gb, min_ping_soundings_lbl,
+                                               self.min_ping_soundings_tb], 'h', add_stretch=True)
+        self.min_ping_soundings_row = QtWidgets.QWidget()
+        self.min_ping_soundings_row.setLayout(min_ping_soundings_layout)
+        self.min_ping_soundings_row.setToolTip('Exclude entire pings with fewer than the minimum number of '
+                                               'valid (non-NaN) soundings.\n\n'
+                                               'Pings are identified by file name and ping time.')
+
         # add depth mode filter for crossline
         # self.depth_mode_list = ['Very Shallow', 'Shallow', 'Medium', 'Deep', 'Deeper',
         #                         'Very Deep', 'Extra Deep', 'Extreme Deep']
@@ -1365,7 +1396,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # set up layout and groupbox for tabs
         tab2_xline_filter_layout = BoxLayout([self.angle_xline_row, self.depth_xline_row, self.dz_abs_row, self.dz_pct_row,
-                                              self.bs_xline_row, self.depth_mode_row, self.bin_count_row], 'v')
+                                              self.bs_xline_row, self.min_ping_soundings_row, self.depth_mode_row,
+                                              self.bin_count_row], 'v')
         tab2_xline_filter_gb = GroupBox('Crosslines', tab2_xline_filter_layout,
                                         False, True, 'tab2_xline_filter_gb')
         tab2_xline_filter_gb.setEnabled(True)
@@ -1496,6 +1528,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 old_filters['bs_enabled'] != self.bs_xline_gb.isChecked() or
                 old_filters['bs_min'] != self.min_bs_xline_tb.text() or
                 old_filters['bs_max'] != self.max_bs_xline_tb.text() or
+                old_filters['min_ping_soundings_enabled'] != self.min_ping_soundings_gb.isChecked() or
+                old_filters['min_ping_soundings'] != self.min_ping_soundings_tb.text() or
                 old_filters['dz_abs_enabled'] != (hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked()) or
                 old_filters['dz_max'] != self.max_dz_tb.text() or
                 old_filters['dz_pct_enabled'] != (hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked()) or
