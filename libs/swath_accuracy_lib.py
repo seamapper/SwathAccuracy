@@ -3206,15 +3206,41 @@ def plot_ping_soundings_distribution(self):
 	n_bins = min(50, max_count) if max_count > 1 else 1
 	ax.hist(ping_counts, bins=n_bins, color='mediumpurple', edgecolor='black', alpha=0.75)
 
+	filter_lines = []
+
 	# Show the minimum-soundings-per-ping filter threshold when enabled.
 	if hasattr(self, 'min_ping_soundings_gb') and self.min_ping_soundings_gb.isChecked():
 		try:
 			min_ping_soundings = float(self.min_ping_soundings_tb.text())
 			ax.axvline(min_ping_soundings, color='red', linestyle='--', linewidth=2,
 					   label=f'Min soundings/ping ({min_ping_soundings:g})')
-			ax.legend(loc='upper right', fontsize=9)
+			filter_lines.append(True)
 		except (ValueError, AttributeError):
 			pass
+
+	# Show equivalent valid-count threshold(s) for the % filter when enabled.
+	if hasattr(self, 'min_ping_valid_pct_gb') and self.min_ping_valid_pct_gb.isChecked():
+		try:
+			min_valid_pct = float(self.min_ping_valid_pct_tb.text())
+			_, ping_inverse = np.unique(ping_keys, return_inverse=True)
+			if ('ping_total_beams' in self.xline and
+					len(self.xline['ping_total_beams']) == len(ping_keys)):
+				ping_total_beams_arr = np.asarray(self.xline['ping_total_beams'], dtype=float)
+				_, first_indices = np.unique(ping_inverse, return_index=True)
+				ping_beam_totals = ping_total_beams_arr[first_indices]
+			else:
+				ping_beam_totals = np.bincount(ping_inverse).astype(float)
+
+			threshold_counts = np.ceil(min_valid_pct / 100.0 * ping_beam_totals)
+			for threshold in np.unique(threshold_counts):
+				ax.axvline(threshold, color='orange', linestyle='--', linewidth=2,
+						   label=f'Valid % filter ({min_valid_pct:g}% → ≥{threshold:g})')
+				filter_lines.append(True)
+		except (ValueError, AttributeError):
+			pass
+
+	if filter_lines:
+		ax.legend(loc='upper right', fontsize=9)
 
 	ax.set_xlabel('Valid Soundings per Ping')
 	ax.set_ylabel('Number of Pings')
