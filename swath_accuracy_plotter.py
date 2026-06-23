@@ -290,6 +290,7 @@ class MainWindow(QtWidgets.QMainWindow):
                               self.max_bs_xline_tb,
                               self.min_bs_xline_tb,
                               self.min_ping_soundings_tb,
+                              self.min_ping_valid_pct_tb,
                               self.max_dz_tb,
                               self.max_dz_wd_tb,
                               self.min_bin_count_tb,
@@ -305,6 +306,7 @@ class MainWindow(QtWidgets.QMainWindow):
                               self.angle_xline_gb,
                               self.bs_xline_gb,
                               self.min_ping_soundings_gb,
+                              self.min_ping_valid_pct_gb,
                               self.dz_abs_gb,
                               self.dz_pct_gb,
                               self.depth_mode_gb,
@@ -790,6 +792,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.min_bs_xline_tb.setText('-50')
             self.max_bs_xline_tb.setText('0')
             self.min_ping_soundings_tb.setText('5')
+            self.min_ping_valid_pct_tb.setText('98')
             self.max_dz_tb.setText('10')
             self.max_dz_wd_tb.setText('5')
             self.min_bin_count_tb.setText('10')
@@ -808,6 +811,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.angle_xline_gb.setChecked(False)
             self.bs_xline_gb.setChecked(False)
             self.min_ping_soundings_gb.setChecked(False)
+            self.min_ping_valid_pct_gb.setChecked(False)
             if hasattr(self, 'dz_abs_gb'):
                 self.dz_abs_gb.setChecked(False)
             if hasattr(self, 'dz_pct_gb'):
@@ -1302,6 +1306,22 @@ class MainWindow(QtWidgets.QMainWindow):
                                                'valid (non-NaN) soundings.\n\n'
                                                'Pings are identified by file name and ping time.')
 
+        min_ping_valid_pct_lbl = Label('Min (%):', width=50,
+                                       alignment=(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter))
+        self.min_ping_valid_pct_tb = LineEdit('98', 40, 20, 'min_ping_valid_pct_tb',
+                                              'Minimum percentage of valid soundings required per ping; '
+                                              'all soundings from pings below this percentage are excluded')
+        self.min_ping_valid_pct_tb.setValidator(QDoubleValidator(0, 100, 2))
+        self.min_ping_valid_pct_gb = QtWidgets.QCheckBox('% of Valid Soundings per ping')
+        self.min_ping_valid_pct_gb.setObjectName('min_ping_valid_pct_gb')
+        min_ping_valid_pct_layout = BoxLayout([self.min_ping_valid_pct_gb, min_ping_valid_pct_lbl,
+                                               self.min_ping_valid_pct_tb], 'h', add_stretch=True)
+        self.min_ping_valid_pct_row = QtWidgets.QWidget()
+        self.min_ping_valid_pct_row.setLayout(min_ping_valid_pct_layout)
+        self.min_ping_valid_pct_row.setToolTip('Exclude entire pings when the percentage of valid (non-NaN) '
+                                               'soundings is below the minimum threshold.\n\n'
+                                               'Pings are identified by file name and ping time.')
+
         # add depth mode filter for crossline
         # self.depth_mode_list = ['Very Shallow', 'Shallow', 'Medium', 'Deep', 'Deeper',
         #                         'Very Deep', 'Extra Deep', 'Extreme Deep']
@@ -1396,8 +1416,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # set up layout and groupbox for tabs
         tab2_xline_filter_layout = BoxLayout([self.angle_xline_row, self.depth_xline_row, self.dz_abs_row, self.dz_pct_row,
-                                              self.bs_xline_row, self.min_ping_soundings_row, self.depth_mode_row,
-                                              self.bin_count_row], 'v')
+                                              self.bs_xline_row, self.min_ping_soundings_row, self.min_ping_valid_pct_row,
+                                              self.depth_mode_row, self.bin_count_row], 'v')
         tab2_xline_filter_gb = GroupBox('Crosslines', tab2_xline_filter_layout,
                                         False, True, 'tab2_xline_filter_gb')
         tab2_xline_filter_gb.setEnabled(True)
@@ -1530,6 +1550,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 old_filters['bs_max'] != self.max_bs_xline_tb.text() or
                 old_filters['min_ping_soundings_enabled'] != self.min_ping_soundings_gb.isChecked() or
                 old_filters['min_ping_soundings'] != self.min_ping_soundings_tb.text() or
+                old_filters['min_ping_valid_pct_enabled'] != self.min_ping_valid_pct_gb.isChecked() or
+                old_filters['min_ping_valid_pct'] != self.min_ping_valid_pct_tb.text() or
                 old_filters['dz_abs_enabled'] != (hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked()) or
                 old_filters['dz_max'] != self.max_dz_tb.text() or
                 old_filters['dz_pct_enabled'] != (hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked()) or

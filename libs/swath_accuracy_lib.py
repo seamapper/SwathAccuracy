@@ -694,6 +694,7 @@ def filter_xline(self, print_updates=True):
 	depth_idx = np.ones(idx_shape)  # idx of depth final (meters) after tide and z reference adjustments
 	bs_idx = np.ones(idx_shape)  # idz of reported backscatter (dB)
 	min_ping_soundings_idx = np.ones(idx_shape)  # idx of pings with enough valid soundings
+	min_ping_valid_pct_idx = np.ones(idx_shape)  # idx of pings with enough valid sounding percentage
 	dz_ref_idx = np.ones(idx_shape)  # idx of dz from ref (meters)
 	dz_ref_wd_idx = np.ones(idx_shape)  # idx of dz from ref (% WD)
 	depth_mode_idx = np.ones(idx_shape)  # idx of depth mode matching combo box
@@ -762,6 +763,27 @@ def filter_xline(self, print_updates=True):
 		else:
 			update_log(self, 'Skipping min-soundings-per-ping filter (ping identifiers unavailable or out of sync).')
 
+	if hasattr(self, 'min_ping_valid_pct_gb') and self.min_ping_valid_pct_gb.isChecked():
+		min_valid_pct = float(self.min_ping_valid_pct_tb.text())
+		if ('fname' in self.xline and 'datetime' in self.xline and
+				len(self.xline['fname']) == n_soundings and len(self.xline['datetime']) == n_soundings):
+			ping_keys = np.asarray(
+				[f"{fname}|{str(dt)}" for fname, dt in zip(self.xline['fname'], self.xline['datetime'])],
+				dtype=str
+			)
+			if ping_keys.shape == real_idx.shape:
+				unique_ping_keys, ping_inverse, ping_total_counts = np.unique(
+					ping_keys, return_inverse=True, return_counts=True
+				)
+				valid_counts = np.bincount(ping_inverse, weights=real_idx.astype(float))
+				valid_pct = 100.0 * valid_counts / ping_total_counts
+				ping_passes = valid_pct >= min_valid_pct
+				min_ping_valid_pct_idx = ping_passes[ping_inverse] & real_idx
+			elif print_updates:
+				print('Skipping valid-sounding-percentage-per-ping filter: ping key array shape mismatch')
+		else:
+			update_log(self, 'Skipping valid-sounding-percentage-per-ping filter (ping identifiers unavailable or out of sync).')
+
 	if self.depth_mode_gb.isChecked():  # get idx satisfying current depth mode filter
 		depth_mode_filter = self.depth_mode_cbox.currentText().strip().lower()
 		update_log(self, 'Crosslines will be filtered by depth mode: ' + depth_mode_filter)
@@ -776,7 +798,7 @@ def filter_xline(self, print_updates=True):
 	try:
 		# Convert all indices to boolean arrays and ensure they have the same shape
 		filter_arrays = []
-		for idx_array in [angle_idx, depth_idx, bs_idx, min_ping_soundings_idx, dz_abs_idx, dz_pct_idx, depth_mode_idx]:
+		for idx_array in [angle_idx, depth_idx, bs_idx, min_ping_soundings_idx, min_ping_valid_pct_idx, dz_abs_idx, dz_pct_idx, depth_mode_idx]:
 			if idx_array is not None:
 				# Convert to numpy array and ensure boolean type
 				bool_array = np.asarray(idx_array, dtype=bool)
@@ -4150,11 +4172,13 @@ def add_xline_proc_text(self):
 	bs_fil = ['None', ('+' if float(self.min_bs_xline_tb.text()) > 0 else '') + self.min_bs_xline_tb.text() + ' to ' +
 			  ('+' if float(self.max_bs_xline_tb.text()) > 0 else '') + self.max_bs_xline_tb.text() + ' dB']
 	min_ping_soundings_fil = ['None', self.min_ping_soundings_tb.text() + ' soundings/ping']
+	min_ping_valid_pct_fil = ['None', self.min_ping_valid_pct_tb.text() + ' % valid/ping']
 
 	fil_dict = {'Angle filter: ': angle_fil[self.angle_xline_gb.isChecked()],
 				'Depth filter (crossline): ': depth_fil_xline[self.depth_xline_gb.isChecked()],
 				'Backscatter filter: ': bs_fil[self.bs_xline_gb.isChecked()],
 				'Min soundings/ping: ': min_ping_soundings_fil[getattr(self, 'min_ping_soundings_gb', None) is not None and self.min_ping_soundings_gb.isChecked()],
+				'Min valid soundings (%/ping): ': min_ping_valid_pct_fil[getattr(self, 'min_ping_valid_pct_gb', None) is not None and self.min_ping_valid_pct_gb.isChecked()],
 				'Max. diff. (m):': dz_abs_fil[hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked()],
 				'Max. diff. (%WD):': dz_pct_fil[hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked()]}
 
@@ -4810,6 +4834,7 @@ def save_current_filters(self):
 			'xline_bs_min': self.min_bs_xline_tb.text(),
 			'xline_bs_max': self.max_bs_xline_tb.text(),
 			'xline_min_ping_soundings': self.min_ping_soundings_tb.text(),
+			'xline_min_ping_valid_pct': self.min_ping_valid_pct_tb.text(),
 			'xline_dz_max': self.max_dz_tb.text(),
 			'xline_dz_wd_max': self.max_dz_wd_tb.text(),
 			'xline_bin_count_min': self.min_bin_count_tb.text(),
@@ -4824,6 +4849,7 @@ def save_current_filters(self):
 			'xline_angle_enabled': self.angle_xline_gb.isChecked(),
 			'xline_bs_enabled': self.bs_xline_gb.isChecked(),
 			'xline_min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
+			'xline_min_ping_valid_pct_enabled': self.min_ping_valid_pct_gb.isChecked(),
 			'xline_dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 			'xline_dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
 			'xline_depth_mode_enabled': self.depth_mode_gb.isChecked(),
@@ -4898,6 +4924,8 @@ def load_last_filters(self):
 			'bs_max': self.max_bs_xline_tb.text(),
 			'min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
 			'min_ping_soundings': self.min_ping_soundings_tb.text(),
+			'min_ping_valid_pct_enabled': self.min_ping_valid_pct_gb.isChecked(),
+			'min_ping_valid_pct': self.min_ping_valid_pct_tb.text(),
 			'dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 			'dz_max': self.max_dz_tb.text(),
 			'dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
@@ -4929,6 +4957,7 @@ def load_last_filters(self):
 		self.min_bs_xline_tb.setText(filter_settings.get('xline_bs_min', '-50'))
 		self.max_bs_xline_tb.setText(filter_settings.get('xline_bs_max', '0'))
 		self.min_ping_soundings_tb.setText(filter_settings.get('xline_min_ping_soundings', '5'))
+		self.min_ping_valid_pct_tb.setText(filter_settings.get('xline_min_ping_valid_pct', '98'))
 		self.max_dz_tb.setText(filter_settings.get('xline_dz_max', '10'))
 		self.max_dz_wd_tb.setText(filter_settings.get('xline_dz_wd_max', '5'))
 		self.min_bin_count_tb.setText(filter_settings.get('xline_bin_count_min', '10'))
@@ -4956,6 +4985,7 @@ def load_last_filters(self):
 		self.angle_xline_gb.setChecked(filter_settings.get('xline_angle_enabled', True))
 		self.bs_xline_gb.setChecked(filter_settings.get('xline_bs_enabled', True))
 		self.min_ping_soundings_gb.setChecked(filter_settings.get('xline_min_ping_soundings_enabled', False))
+		self.min_ping_valid_pct_gb.setChecked(filter_settings.get('xline_min_ping_valid_pct_enabled', False))
 		if hasattr(self, 'dz_abs_gb'):
 			self.dz_abs_gb.setChecked(filter_settings.get('xline_dz_abs_enabled', True))
 		if hasattr(self, 'dz_pct_gb'):
@@ -5024,6 +5054,8 @@ def load_default_filters(self):
 			'bs_max': self.max_bs_xline_tb.text(),
 			'min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
 			'min_ping_soundings': self.min_ping_soundings_tb.text(),
+			'min_ping_valid_pct_enabled': self.min_ping_valid_pct_gb.isChecked(),
+			'min_ping_valid_pct': self.min_ping_valid_pct_tb.text(),
 			'dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 			'dz_max': self.max_dz_tb.text(),
 			'dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
@@ -5050,6 +5082,7 @@ def load_default_filters(self):
 		self.min_bs_xline_tb.setText('-50')
 		self.max_bs_xline_tb.setText('0')
 		self.min_ping_soundings_tb.setText('5')
+		self.min_ping_valid_pct_tb.setText('98')
 		self.max_dz_tb.setText('10')
 		self.max_dz_wd_tb.setText('5')
 		self.min_bin_count_tb.setText('10')
@@ -5072,6 +5105,7 @@ def load_default_filters(self):
 		self.angle_xline_gb.setChecked(False)
 		self.bs_xline_gb.setChecked(False)
 		self.min_ping_soundings_gb.setChecked(False)
+		self.min_ping_valid_pct_gb.setChecked(False)
 		if hasattr(self, 'dz_abs_gb'):
 			self.dz_abs_gb.setChecked(False)
 		if hasattr(self, 'dz_pct_gb'):
@@ -5248,6 +5282,8 @@ def save_session(self):
 				'xline_bs_max': self.max_bs_xline_tb.text(),
 				'xline_min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
 				'xline_min_ping_soundings': self.min_ping_soundings_tb.text(),
+				'xline_min_ping_valid_pct_enabled': self.min_ping_valid_pct_gb.isChecked(),
+				'xline_min_ping_valid_pct': self.min_ping_valid_pct_tb.text(),
 				'xline_dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
 				'xline_dz_max': self.max_dz_tb.text(),
 				'xline_dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
@@ -5448,6 +5484,8 @@ def load_session(self):
 		self.max_bs_xline_tb.setText(filter_settings.get('xline_bs_max', '0'))
 		self.min_ping_soundings_gb.setChecked(filter_settings.get('xline_min_ping_soundings_enabled', False))
 		self.min_ping_soundings_tb.setText(filter_settings.get('xline_min_ping_soundings', '5'))
+		self.min_ping_valid_pct_gb.setChecked(filter_settings.get('xline_min_ping_valid_pct_enabled', False))
+		self.min_ping_valid_pct_tb.setText(filter_settings.get('xline_min_ping_valid_pct', '98'))
 		if hasattr(self, 'dz_abs_gb'):
 			self.dz_abs_gb.setChecked(filter_settings.get('xline_dz_abs_enabled', False))
 		self.max_dz_tb.setText(filter_settings.get('xline_dz_max', '10'))
