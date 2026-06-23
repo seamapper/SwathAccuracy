@@ -772,11 +772,19 @@ def filter_xline(self, print_updates=True):
 				dtype=str
 			)
 			if ping_keys.shape == real_idx.shape:
-				unique_ping_keys, ping_inverse, ping_total_counts = np.unique(
-					ping_keys, return_inverse=True, return_counts=True
-				)
+				unique_ping_keys, ping_inverse = np.unique(ping_keys, return_inverse=True)
 				valid_counts = np.bincount(ping_inverse, weights=real_idx.astype(float))
-				valid_pct = 100.0 * valid_counts / ping_total_counts
+				if ('ping_total_beams' in self.xline and
+						len(self.xline['ping_total_beams']) == n_soundings):
+					ping_total_beams_arr = np.asarray(self.xline['ping_total_beams'], dtype=float)
+					_, first_indices = np.unique(ping_inverse, return_index=True)
+					ping_beam_totals = ping_total_beams_arr[first_indices]
+				else:
+					# Fallback for legacy data: use stored sounding count as total.
+					_, _, ping_beam_totals = np.unique(ping_keys, return_inverse=True, return_counts=True)
+					if print_updates:
+						print('Using stored sounding count as ping total (ping_total_beams unavailable)')
+				valid_pct = 100.0 * valid_counts / ping_beam_totals
 				ping_passes = valid_pct >= min_valid_pct
 				min_ping_valid_pct_idx = ping_passes[ping_inverse] & real_idx
 			elif print_updates:
@@ -2415,7 +2423,7 @@ def sortDetectionsAccuracy(self, data, print_updates=False):
 					'ping_mode', 'pulse_form', 'swath_mode', 'frequency',
 					'max_port_deg', 'max_stbd_deg', 'max_port_m', 'max_stbd_m',
 					'tx_x_m', 'tx_y_m', 'tx_z_m', 'aps_x_m', 'aps_y_m', 'aps_z_m', 'wl_z_m',
-					'ping_e', 'ping_n', 'ping_utm_zone']  # mode_bin
+					'ping_e', 'ping_n', 'ping_utm_zone', 'ping_total_beams']  # mode_bin
 
 	det = {k: [] for k in det_key_list}
 
@@ -2444,10 +2452,12 @@ def sortDetectionsAccuracy(self, data, print_updates=False):
 			# print('working on ping number ', p)
 			det_int = data[f]['XYZ'][p][det_int_key]  # get detection integers for this ping
 			det_idx = [i for i, v in enumerate(det_int) if v <= det_int_threshold]  # indices of all valid detections
+			ping_total_beams = len(det_int)
 
 			# extend swath data from appropriate keys/values in data dicts
 			# future general sorter: accuracy, keep all valid det_int; coverage, reduce for outermost valid det_int
 			det['fname'].extend([data[f]['fname'].rsplit('/')[-1]] * len(det_idx))  # store fname for each det
+			det['ping_total_beams'].extend([ping_total_beams] * len(det_idx))
 			det['x'].extend([data[f]['XYZ'][p][along_key][i] for i in det_idx])  # as parsed
 			det['y'].extend([data[f]['XYZ'][p][across_key][i] for i in det_idx])  # as parsed
 			det['z'].extend([data[f]['XYZ'][p][depth_key][i] for i in det_idx])  # as parsed

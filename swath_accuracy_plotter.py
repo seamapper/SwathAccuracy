@@ -1319,8 +1319,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.min_ping_valid_pct_row = QtWidgets.QWidget()
         self.min_ping_valid_pct_row.setLayout(min_ping_valid_pct_layout)
         self.min_ping_valid_pct_row.setToolTip('Exclude entire pings when the percentage of valid (non-NaN) '
-                                               'soundings is below the minimum threshold.\n\n'
-                                               'Pings are identified by file name and ping time.')
+                                               'soundings relative to the total beams in the ping is below the '
+                                               'minimum threshold.\n\n'
+                                               'Total beams includes invalid detections that are not stored as '
+                                               'soundings. Pings are identified by file name and ping time.')
 
         # add depth mode filter for crossline
         # self.depth_mode_list = ['Very Shallow', 'Shallow', 'Medium', 'Deep', 'Deeper',
