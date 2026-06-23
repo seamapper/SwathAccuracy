@@ -480,13 +480,17 @@ def remove_acc_files(self):  # remove selected crossline files only
 			update_log(self, 'Removed ' + fname)
 
 			try:  # try to remove detections associated with this file
-				if fname.rsplit('.')[-1] in ['all', 'kmall']:
+				if fname.rsplit('.')[-1] in ['all', 'kmall'] and self.xline and 'fname' in self.xline:
 					# get indices of soundings in det dict with matching filenames
 					i = [j for j in range(len(self.xline['fname'])) if self.xline['fname'][j] == fname]
+					if not i:
+						continue
 
-					for k in self.xline.keys():  # loop through all keys and remove values at these indices
+					for k in list(self.xline.keys()):  # loop through all keys and remove values at these indices
 						print(k)
-						self.xline[k] = np.delete(self.xline[k], i).tolist()
+						arr = np.asarray(self.xline[k])
+						if arr.shape and arr.shape[0] == len(self.xline['fname']):
+							self.xline[k] = np.delete(arr, i).tolist()
 
 					# remove trackline associated with this file
 					for k in self.xline_track.keys():
@@ -511,18 +515,17 @@ def remove_acc_files(self):  # remove selected crossline files only
 		print('got f_exts =', f_exts)
 
 		# recalculate beamwise results if crossline soundings were removed
-		if any([ext in ['all', 'kmall'] for ext in f_exts]) and self.xline:
+		get_current_file_list(self)
+		fnames_xline = [f for f in self.filenames if f.rsplit('.')[-1] in ['all', 'kmall']]
+		if len(fnames_xline) == 0:  # all crossline files removed, clear detection dicts before replot
+			self.xline = {}
+			self.xline_track = {}
+		elif self.xline and len(self.xline.get('z', [])) == 0:
+			self.xline = {}
+			self.xline_track = {}
+		elif any([ext in ['all', 'kmall'] for ext in f_exts]) and self.xline:
 			print('found all or kmall extension, calling bin_beamwise from remove_files')
 			bin_beamwise(self)
-
-	# reset xline dict if all files have been removed
-	get_current_file_list(self)
-	print('in remove_acc_files, self.filenames after file removal is', self.filenames)
-	fnames_xline = [f for f in self.filenames if f.rsplit('.')[-1] in ['all', 'kmall']]
-	print('in remove_acc_files, fnames_xline after file removal is', fnames_xline)
-	if len(fnames_xline) == 0:  # all .all and .xyz files have been removed, reset det dicts
-		self.xline = {}
-		self.xline_track = {}
 
 	update_buttons(self)
 	refresh_plot(self, refresh_list=['acc', 'ref', 'tide'], sender='remove_acc_files')  # refresh with updated (reduced or cleared) detection data
@@ -674,13 +677,19 @@ def filter_xline(self, print_updates=True):
 		if print_updates:
 			print('No crossline data available for filtering')
 		return
+
+	n_soundings = len(self.xline['z'])
+	if n_soundings == 0:
+		if print_updates:
+			print('No crossline soundings available for filtering')
+		return
 	
 	# set up indices for optional masking on angle, depth, bs; all idx true until fail optional filter settings
 	# all soundings masked for nans (e.g., occasional nans in EX0908 data)
 	# print('in filter_xline with fields:', self.xline.keys())
 
 	# set up indices for each filter parameter
-	idx_shape = np.shape(np.asarray(self.xline['z']))
+	idx_shape = (n_soundings,)
 	angle_idx = np.ones(idx_shape)  # inx of beam angle
 	depth_idx = np.ones(idx_shape)  # idx of depth final (meters) after tide and z reference adjustments
 	bs_idx = np.ones(idx_shape)  # idz of reported backscatter (dB)
@@ -688,8 +697,11 @@ def filter_xline(self, print_updates=True):
 	dz_ref_idx = np.ones(idx_shape)  # idx of dz from ref (meters)
 	dz_ref_wd_idx = np.ones(idx_shape)  # idx of dz from ref (% WD)
 	depth_mode_idx = np.ones(idx_shape)  # idx of depth mode matching combo box
-	real_idx = np.logical_not(np.logical_or(np.isnan(self.xline['z_final']),
-											np.isnan(self.xline['z_final'])))  # idx true for NON-NAN soundings
+	if ('z_final' in self.xline and len(self.xline['z_final']) == n_soundings):
+		z_for_valid = np.asarray(self.xline['z_final'])
+	else:
+		z_for_valid = np.asarray(self.xline['z'])
+	real_idx = ~np.isnan(z_for_valid)  # idx true for NON-NAN soundings
 
 	if print_updates:
 		print('number of xline soundings:', len(self.xline['z_final']))
@@ -729,22 +741,26 @@ def filter_xline(self, print_updates=True):
 
 	if hasattr(self, 'min_ping_soundings_gb') and self.min_ping_soundings_gb.isChecked():
 		min_ping_soundings = int(float(self.min_ping_soundings_tb.text()))
-		if 'fname' in self.xline and 'datetime' in self.xline:
+		if ('fname' in self.xline and 'datetime' in self.xline and
+				len(self.xline['fname']) == n_soundings and len(self.xline['datetime']) == n_soundings):
 			# Keep one ping key per sounding (fname, datetime) to match filter index shape.
 			# Normalize to strings so np.unique does not try to sort mixed datetime/str objects.
 			ping_keys = np.asarray(
 				[f"{fname}|{str(dt)}" for fname, dt in zip(self.xline['fname'], self.xline['datetime'])],
 				dtype=str
 			)
-			valid_ping_keys = ping_keys[real_idx]
-			unique_ping_keys, valid_ping_inverse, valid_ping_counts = np.unique(
-				valid_ping_keys, return_inverse=True, return_counts=True
-			)
-			valid_ping_mask = valid_ping_counts[valid_ping_inverse] >= min_ping_soundings
-			min_ping_soundings_idx = np.zeros(idx_shape, dtype=bool)
-			min_ping_soundings_idx[real_idx] = valid_ping_mask
+			if ping_keys.shape == real_idx.shape:
+				valid_ping_keys = ping_keys[real_idx]
+				unique_ping_keys, valid_ping_inverse, valid_ping_counts = np.unique(
+					valid_ping_keys, return_inverse=True, return_counts=True
+				)
+				valid_ping_mask = valid_ping_counts[valid_ping_inverse] >= min_ping_soundings
+				min_ping_soundings_idx = np.zeros(idx_shape, dtype=bool)
+				min_ping_soundings_idx[real_idx] = valid_ping_mask
+			elif print_updates:
+				print('Skipping min-soundings-per-ping filter: ping key array shape mismatch')
 		else:
-			update_log(self, 'Skipping min-soundings-per-ping filter (ping identifiers unavailable).')
+			update_log(self, 'Skipping min-soundings-per-ping filter (ping identifiers unavailable or out of sync).')
 
 	if self.depth_mode_gb.isChecked():  # get idx satisfying current depth mode filter
 		depth_mode_filter = self.depth_mode_cbox.currentText().strip().lower()
@@ -2917,7 +2933,7 @@ def bin_beamwise(self, refresh_plot=False):
 		print('self.xline == {}; bin_beamwise called to reset stats')
 		update_log(self, 'No crossline data available for binning')
 
-	elif 'z_final' in self.xline and 'z' in self.ref:
+	elif ('z_final' in self.xline and 'z' in self.ref and len(self.xline.get('z', [])) > 0):
 		update_log(self, 'Applying crossline filters...')
 		filter_start = process_time()
 		filter_xline(self)
