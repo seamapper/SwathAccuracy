@@ -473,8 +473,12 @@ class MainWindow(QtWidgets.QMainWindow):
                                            'needed (e.g., Qimera .xyz exports do not include sounding density. '
                                            'A density layer can be exported from the same surface as .xyz, changed to '
                                            '.xyd for clarity, and imported here to support filtering by sounding count')
-        self.add_ref_surf_btn.setFixedWidth(170)
-        self.add_dens_surf_btn.setFixedWidth(170)
+        self.add_ref_surf_btn.setMinimumWidth(0)
+        self.add_ref_surf_btn.setMaximumWidth(16777215)
+        self.add_ref_surf_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.add_dens_surf_btn.setMinimumWidth(0)
+        self.add_dens_surf_btn.setMaximumWidth(16777215)
+        self.add_dens_surf_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
 
         proj_list = [str(i) + 'N' for i in range(1, 61)]  # list of all UTM zones, 1-60N and 1-60S
         proj_list.extend([str(i) + 'S' for i in range(1, 61)])
@@ -496,18 +500,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ref_surf_tb.setMinimumWidth(0)
         self.ref_surf_tb.setMaximumWidth(16777215)
         self.ref_surf_tb.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        ref_file_layout = QtWidgets.QHBoxLayout()
-        ref_file_layout.addWidget(self.add_ref_surf_btn)
-        ref_file_layout.addWidget(self.ref_surf_tb, 1)
+        ref_file_layout = BoxLayout([self.ref_surf_tb, self.add_ref_surf_btn], 'v')
         self.dens_surf_tb = LineEdit('No density surface loaded', 200, 20, 'dens_surf_tb',
                                      'Loaded density surface filename')
         self.dens_surf_tb.setReadOnly(True)
         self.dens_surf_tb.setMinimumWidth(0)
         self.dens_surf_tb.setMaximumWidth(16777215)
         self.dens_surf_tb.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        dens_file_layout = QtWidgets.QHBoxLayout()
-        dens_file_layout.addWidget(self.add_dens_surf_btn)
-        dens_file_layout.addWidget(self.dens_surf_tb, 1)
+        dens_file_layout = BoxLayout([self.dens_surf_tb, self.add_dens_surf_btn], 'v')
         ref_btn_layout = BoxLayout([ref_file_layout, dens_file_layout, ref_cbox_layout], 'v')
         ref_utm_gb = GroupBox('Reference Surface', ref_btn_layout, False, False, 'ref_surf_gb')
 
@@ -550,16 +550,16 @@ class MainWindow(QtWidgets.QMainWindow):
                                        'The time zone is assumed to match that used in the accuracy crossline files '
                                        'and the vertical datum is assumed to match that used during processing of the '
                                        'reference surface.')
-        self.add_tide_btn.setFixedWidth(170)
+        self.add_tide_btn.setMinimumWidth(0)
+        self.add_tide_btn.setMaximumWidth(16777215)
+        self.add_tide_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
         self.tide_file_tb = LineEdit('No tide file loaded', 200, 20, 'tide_file_tb',
                                      'Loaded tide filename')
         self.tide_file_tb.setReadOnly(True)
         self.tide_file_tb.setMinimumWidth(0)
         self.tide_file_tb.setMaximumWidth(16777215)
         self.tide_file_tb.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        tide_file_layout = QtWidgets.QHBoxLayout()
-        tide_file_layout.addWidget(self.add_tide_btn)
-        tide_file_layout.addWidget(self.tide_file_tb, 1)
+        tide_file_layout = BoxLayout([self.tide_file_tb, self.add_tide_btn], 'v')
 
         tide_btn_gb = GroupBox('Tide', BoxLayout([tide_file_layout], 'v'), False, False, 'tide_btn_gb')
 
