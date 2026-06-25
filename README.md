@@ -1,5 +1,7 @@
 # Swath Accuracy Plotter
 
+![Example Plot](media/swath_accuracy.jpg)
+
 A PyQt6-based application for visualizing and analyzing multibeam echosounder swath accuracy data. Provides tools for plotting swath data, reference surfaces, uncertainty analysis, and exporting results.
 
 ## Description
@@ -9,9 +11,9 @@ The Swath Accuracy Plotter is a comprehensive toolkit for assessing multibeam ec
 - Load and analyze crossline data from multibeam systems
 - Compare crossline soundings against reference surfaces
 - Visualize accuracy metrics (bias, standard deviation) as a function of beam angle
-- Apply various filters to reference surfaces and crossline data
+- Apply various filters to reference surfaces and crossline data (including minimum valid soundings per ping)
 - Export results as plots and GeoTIFF files
-- Save and load analysis sessions
+- Save and load complete analyses (plots, settings, and data file references)
 
 ## Features
 
@@ -22,9 +24,10 @@ The Swath Accuracy Plotter is a comprehensive toolkit for assessing multibeam ec
   - Reference surface visualizations (depth, density, slope, uncertainty)
   - Crossline coverage plots
   - Tide plots
-- **Advanced Filtering**: Filter data by depth, angle, backscatter, slope, density, and uncertainty
-- **Session Management**: Save and load complete analysis sessions
+- **Advanced Filtering**: Filter data by depth, angle, backscatter, slope, density, uncertainty, and minimum percentage of valid soundings per ping
+- **Save / Load Analysis**: Export all plot tabs plus `{basename}_analysis.json` and `{basename}_info.txt`; reload a saved analysis to restore plot settings, filter settings, and data files (with automatic recalculation)
 - **Export Capabilities**: Export plots as PNG/JPG/TIF and reference surfaces as GeoTIFF
+- **Processing Feedback**: Crossline parsing shows a centered progress dialog with current file name and progress bar
 - **Unique Line Colors**: Color-code points by crossline file for easy identification
 - **IHO Standards**: Visualize Special Order, Order 1a, 1b, 2, and 3 accuracy limits
 - **Dark Mode GUI**: Fusion style with dark palette so the interface looks consistent on both light and dark system themes
@@ -65,7 +68,7 @@ python swath_accuracy_plotter.py
 
 ### Build a standalone executable
 
-The executable name is **Swath_Accuracy_Plotter_v** plus the version from the code (e.g. `Swath_Accuracy_Plotter_v2026.01.exe`).
+The executable name is **Swath_Accuracy_Plotter_v** plus the version from the code (e.g. `Swath_Accuracy_Plotter_v2026.07.exe`).
 
 - **Option 1 – Batch file (Windows)**  
   Double‑click **`build_exe.bat`** in the project root. It uses the Python in `..\.venv\Scripts\python.exe`; edit the bat file if your venv is elsewhere.
@@ -81,12 +84,25 @@ The built exe is written to the **`dist`** folder. The build uses PyInstaller wi
 
 ### Basic Workflow
 
-1. **Load Reference Surface**: Use "Add Reference Surface" to load a reference surface file (XYZ format in UTM projection)
+1. **Load Reference Surface**: Use "Add Reference Surface" to load a reference surface file (XYZ format in UTM projection). Select the correct UTM zone if it is not detected from the filename.
 2. **Load Optional Density/Tide**: Use "Add Density Surface" and/or "Add Tide" as needed (both support remove toggles after loading)
-3. **Load Crosslines**: Use "Add Crosslines" or "Add Directory" to load crossline data files (.all, .kmall, or ASCII.txt formats)
-4. **Configure Filters**: Set up filters in the "Filter" tab to refine your analysis
-5. **Calculate Accuracy**: Click "Calculate Accuracy" to process the data
-6. **Customize/Save**: Adjust plot settings and filters, then use "Save All Plots" or "Export All to GeoTIFF"
+3. **Load Crosslines**: Use "Add Crosslines" or "Add Directory" to load crossline data files (.all, .kmall, or ASCII.txt formats). A progress dialog appears while new files are parsed.
+4. **Configure Filters**: Set up filters in the **Filter** tab to refine your analysis (save/load/default filter presets at the bottom of the tab)
+5. **Calculate Accuracy**: Click **Calculate Accuracy** in the **Data Analysis** group. The button highlights yellow when inputs or settings change and a recalculation is recommended; it returns to normal after calculation completes (including after **Load Analysis**).
+6. **Customize Plots**: Adjust settings in the **Plot** tab (save/load/default plot presets at the bottom of the tab)
+7. **Save or Reload**: Use **Save Analysis** to export all plot tabs and an analysis JSON file, or **Load Analysis** to restore a previously saved analysis. Use **Export All to GeoTIFF** for raster export of reference surfaces.
+
+### Save Analysis / Load Analysis
+
+**Save Analysis** prompts for an output folder and basename, then writes:
+
+- Plot images for all tabs (accuracy, reference surfaces, depth, uncertainty, density, slope, soundings, valid soundings, tide, etc.)
+- `{basename}_info.txt` — processing summary text
+- `{basename}_analysis.json` — plot settings, filter settings, UTM zone, and relative paths to crossline, reference, density, and tide files
+
+Keep the JSON file alongside the referenced data files (or use the same relative paths when moving the analysis folder). **Load Analysis** clears the current session, restores settings and file paths from the JSON, reloads the data files, and runs **Calculate Accuracy** automatically when crosslines are present.
+
+The **Calculate Accuracy** button turns yellow and bold when crossline, reference, or tide data changes and a manual recalculation may be needed. After **Load Analysis** or a successful **Calculate Accuracy** run, the button returns to normal styling.
 
 ### Supported File Formats
 
@@ -108,7 +124,7 @@ SwathAccuracy/
 ├── libs/                      # Core library modules
 │   ├── swath_accuracy_lib.py  # Main plotting and analysis functions
 │   ├── file_fun.py            # File I/O operations
-│   ├── gui_widgets.py         # Custom GUI widgets
+│   ├── gui_widgets.py         # Custom GUI widgets (including progress dialog)
 │   ├── parseEM.py             # EM file parsing
 │   ├── readEM.py              # EM file reading
 │   ├── kmall.py               # KMALL file support
@@ -122,7 +138,9 @@ SwathAccuracy/
 
 ## Version History
 
-- **2026.02**: Major GUI workflow updates: dedicated Reference/Density/Tide file fields with add/remove toggles, reorganized left-panel controls (Crossline Data/Tide/Plot Data/Program Settings), renamed controls, and new "Scale colors to loaded data" option for dynamic color scaling across depth/density/slope/uncertainty plots and tabs.
+- **2026.07**: Save/Load Analysis workflow (`{basename}_analysis.json` with plot/filter settings and file paths); **% of Valid Soundings per ping** crossline filter; crossline parsing progress shown in a centered dialog; left-panel layout updates (**Data Analysis** group, plot/filter preset buttons at tab bottoms); improved Windows path handling and reference UTM zone restore on load; **Calculate Accuracy** button styling resets after load/calc completes.
+
+- **2026.02**: Major GUI workflow updates: dedicated Reference/Density/Tide file fields with add/remove toggles, reorganized left-panel controls (Crossline Data/Tide/Plot Data), renamed controls, and new "Scale colors to loaded data" option for dynamic color scaling across depth/density/slope/uncertainty plots and tabs.
 
 - **2026.01**: Dark mode GUI (Fusion style + dark palette); versioned exe build (build_exe.py / build_exe.bat)
 - **2025.8**: Fix for save_all_plots import

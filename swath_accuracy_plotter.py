@@ -15,9 +15,6 @@ Author(s):
 Created:
     Thu Apr 11 14:45:21 2019
 
-Version:
-    2025.6
-
 Dependencies:
     - PyQt6
     - matplotlib

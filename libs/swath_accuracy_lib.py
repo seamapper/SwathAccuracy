@@ -192,6 +192,18 @@ def init_tide_ax(self):  # set initial tide plot parameters
 
 
 
+CALC_ACC_BTN_STYLE_RECALC = "background-color: yellow; color: black; font-weight: bold"
+
+
+def reset_calc_accuracy_btn_style(self):
+	"""Restore Calculate Accuracy button to default palette styling."""
+	self.calc_accuracy_btn.setStyleSheet("")
+
+
+def highlight_calc_accuracy_btn(self):
+	"""Highlight Calculate Accuracy button when recalculation is recommended."""
+	self.calc_accuracy_btn.setStyleSheet(CALC_ACC_BTN_STYLE_RECALC)
+
 
 def update_buttons(self, recalc_acc=False):
 	# enable or disable file selection and calc_accuracy buttons depending on loaded files
@@ -231,17 +243,17 @@ def update_buttons(self, recalc_acc=False):
 		self.calc_accuracy_btn.setEnabled(True)
 
 		if recalc_acc:
-			self.calc_accuracy_btn.setStyleSheet("background-color: yellow; color: black; font-weight: bold")
+			highlight_calc_accuracy_btn(self)
 			# Start flashing the button text
 			# if not self.is_flashing:
 			# 	self.flash_timer.start(500)  # Flash every 500ms
 			# 	self.is_flashing = True
 		else:
-			self.calc_accuracy_btn.setStyleSheet("color: black; font-weight: normal")
+			reset_calc_accuracy_btn_style(self)
 
 	else:
 		self.calc_accuracy_btn.setEnabled(False)
-		self.calc_accuracy_btn.setStyleSheet("color: black; font-weight: normal")
+		reset_calc_accuracy_btn_style(self)
 		# Stop flashing when button is disabled
 		# if self.is_flashing:
 		# 	self.stop_flashing_calc_accuracy_button()
@@ -2442,7 +2454,7 @@ def parse_crosslines(self):
 		self.calc_pb.setStyleSheet("")  # restore default progress bar styling
 		self.hide_progress_dialog()
 
-	self.calc_accuracy_btn.setStyleSheet("color: black; font-weight: normal")  # reset the button text color to default
+	reset_calc_accuracy_btn_style(self)
 
 	return num_new_files
 
@@ -5680,6 +5692,7 @@ def load_session(self):
 		
 		refresh_plot(self)
 		update_buttons(self)
+		reset_calc_accuracy_btn_style(self)
 		
 		timestamp = session_data.get('saved_timestamp', 'Unknown')
 		update_log(self, f'Session loaded (saved: {timestamp})')
@@ -5723,6 +5736,7 @@ def load_analysis(self):
 		
 		refresh_plot(self)
 		update_buttons(self)
+		reset_calc_accuracy_btn_style(self)
 		
 		timestamp = analysis_data.get('saved_timestamp', 'Unknown')
 		basename = analysis_data.get('basename', os.path.basename(file_path))
