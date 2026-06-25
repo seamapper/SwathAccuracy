@@ -195,3 +195,46 @@ class CheckBoxTextBox(QtWidgets.QHBoxLayout):
         self.chk = CheckBox(label, set_checked, name, tool_tip)
         self.addWidget(self.chk)
         self.addWidget(self.textbox)
+
+
+class ProgressDialog(QtWidgets.QDialog):
+    """Modeless dialog showing file-processing status and progress."""
+
+    def __init__(self, parent=None):
+        super(ProgressDialog, self).__init__(parent)
+        self.setWindowTitle('Processing')
+        self.setModal(False)
+        self.setMinimumWidth(560)
+        self.setMinimumHeight(130)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        self.status_label = Label('Current File:')
+        self.status_label.setWordWrap(True)
+        self.status_label.setMinimumHeight(40)
+        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setMinimumWidth(520)
+        self.progress_bar.setFixedHeight(28)
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.progress_bar)
+
+    def show_progress(self, title='Processing'):
+        self.setWindowTitle(title)
+        self.progress_bar.setStyleSheet('')
+        self.progress_bar.setValue(0)
+        self.status_label.setText('Current File [0/0]:')
+        self.adjustSize()
+        self.show()
+        if self.parent():
+            parent_geo = self.parent().geometry()
+            dialog_x = parent_geo.x() + (parent_geo.width() - self.width()) // 2
+            dialog_y = parent_geo.y() + (parent_geo.height() - self.height()) // 2
+            self.move(dialog_x, dialog_y)
+        self.raise_()
+        self.activateWindow()
+
+    def hide_progress(self):
+        self.hide()

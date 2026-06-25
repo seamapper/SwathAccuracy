@@ -236,6 +236,8 @@ def update_buttons(self, recalc_acc=False):
 			# if not self.is_flashing:
 			# 	self.flash_timer.start(500)  # Flash every 500ms
 			# 	self.is_flashing = True
+		else:
+			self.calc_accuracy_btn.setStyleSheet("color: black; font-weight: normal")
 
 	else:
 		self.calc_accuracy_btn.setEnabled(False)
@@ -243,6 +245,49 @@ def update_buttons(self, recalc_acc=False):
 		# Stop flashing when button is disabled
 		# if self.is_flashing:
 		# 	self.stop_flashing_calc_accuracy_button()
+
+
+def set_ref_utm_zone(self, utm_str):
+	"""Set the reference surface UTM zone combobox and tracking string."""
+	if not utm_str or not hasattr(self, 'ref_proj_cbox'):
+		return False
+	utm_str = utm_str.strip().upper()
+	if len(utm_str) < 2 or utm_str[-1] not in ('N', 'S'):
+		return False
+	zone_num = utm_str[:-1].lstrip('0') or '0'
+	utm_str = zone_num + utm_str[-1]
+	utm_idx = self.ref_proj_cbox.findText(utm_str)
+	if utm_idx < 0:
+		return False
+	self.ref_proj_cbox.setCurrentIndex(utm_idx)
+	self.ref_utm_str = utm_str
+	if getattr(self, 'ref', None):
+		self.ref['utm_zone'] = utm_str
+	return True
+
+
+def set_ref_utm_from_filename(self, filepath):
+	"""Detect and set reference UTM zone from a filename, if present."""
+	if not filepath:
+		return False
+	fname_str = os.path.basename(filepath)
+	utm_str = None
+	utm_match = re.search(r'(?:UTM|utm)[_\s-]*(\d{1,2}[NS])', fname_str)
+	if utm_match:
+		utm_str = utm_match.group(1)
+	else:
+		try:
+			loose_match = re.search(r'[_-]*\s*[0-9]{1,2}[NS]', fname_str)
+			if loose_match:
+				utm_str = re.search(r'\d+[NS]', loose_match.group(), re.IGNORECASE).group()
+		except AttributeError:
+			pass
+	if not utm_str:
+		return False
+	if set_ref_utm_zone(self, utm_str):
+		update_log(self, 'Found UTM zone from filename: ' + self.ref_utm_str)
+		return True
+	return False
 
 
 def add_ref_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
@@ -256,35 +301,19 @@ def add_ref_file(self, ftype_filter, input_dir='HOME', include_subdir=False):
 	self.ref_surf_file = fname[0]
 	if hasattr(self, 'ref_surf_tb'):
 		self.ref_surf_tb.setText(os.path.basename(self.ref_surf_file))
-	# try to get UTM zone from filename; zone can be, e.g,, 'UTM-11S', '14N',  w/ or w/o UTM preceding and -, _, or ' '
-	# get decimal and hemisphere, strip zero padding and remove spaces for comparison to UTM combobox list
-	if fname and len(fname) > 0:
-		fname_str = fname[0]
-		fname_str = fname_str[fname_str.rfind('/') + 1:].rstrip()
+	if not set_ref_utm_from_filename(self, self.ref_surf_file):
+		update_log(self, 'Please select the reference surface UTM zone')
+		self.ref_proj_cbox.setCurrentIndex(0)
 
-		try:
-			utm_idx = -1
-			utm_str = re.search(r"[_-]*\s*[0-9]{1,2}[NS]", fname_str).group()
-			utm_str = re.search(r'\d+[NS]', utm_str).group().strip('0').replace(' ', '')
-			utm_idx = self.ref_proj_cbox.findText(utm_str)
-			print('found utm_str, utm_idx =', utm_str, utm_idx)
+	if self.ref_utm_str not in ('', 'N/A'):
+		parse_ref_depth(self)
 
-		except:
-			update_log(self, 'Please select the reference surface UTM zone')
-			self.ref_proj_cbox.setCurrentIndex(0)
+		if getattr(self, 'dens_surf_file', '') and 'c' not in self.ref:
+			print('processing density file already loaded but not added in self.ref yet (')
+			process_dens_file(self)
 
-		if utm_idx > -1:
-			update_log(self, 'Found UTM zone from filename: ' + utm_str)
-			self.ref_proj_cbox.setCurrentIndex(utm_idx)
-			self.ref_utm_str = utm_str
-			parse_ref_depth(self)
-
-			if getattr(self, 'dens_surf_file', '') and 'c' not in self.ref:
-				print('processing density file already loaded but not added in self.ref yet (')
-				process_dens_file(self)
-
-			make_ref_surf(self)
-			refresh_plot(self, refresh_list=['ref'], set_active_tab=1, sender='add_ref_file')
+		make_ref_surf(self)
+		refresh_plot(self, refresh_list=['ref'], set_active_tab=1, sender='add_ref_file')
 
 	update_buttons(self, recalc_acc=True)
 
@@ -541,7 +570,8 @@ def clear_files(self):
 	update_log(self, 'Cleared all files')
 	self.current_file_lbl.setText('Current File [0/0]:')
 	self.calc_pb.setValue(0)
-	
+	self.hide_progress_dialog()
+
 	# Update button styling after clearing files
 	update_buttons(self)
 	
@@ -852,7 +882,7 @@ def parse_tide(self, unit_set_by_user=False):  # force_refresh=False):
 			self.tide_file_tb.setText(os.path.basename(fname_tide))
 
 		self.tide = {}
-		self.tide['fname'] = fname_tide.rsplit('/', 1)[1]
+		self.tide['fname'] = os.path.basename(fname_tide)
 		# print('storing tide fname =', self.tide['fname'])
 		self.tide['time_obj'], self.tide['amplitude'] = [], []
 
@@ -1076,7 +1106,7 @@ def parse_ref_depth(self):
 	else:
 		if hasattr(self, 'ref_surf_tb'):
 			self.ref_surf_tb.setText(os.path.basename(fname_ref))
-		self.ref['fname'] = fname_ref.rsplit('/', 1)[1]
+		self.ref['fname'] = os.path.basename(fname_ref)
 		print(fname_ref)
 		fid_ref = open(fname_ref, 'r')
 		e_ref, n_ref, z_ref, u_ref = [], [], [], []
@@ -1102,7 +1132,7 @@ def parse_ref_depth(self):
 	self.ref['u'] = np.array(u_ref, dtype=np.float32)
 
 
-	update_log(self, 'Imported ref grid: ' + fname_ref.split('/')[-1] + ' with ' +
+	update_log(self, 'Imported ref grid: ' + os.path.basename(fname_ref) + ' with ' +
 			   str(len(self.ref['z'])) + ' nodes')
 	update_log(self, 'Ref grid is assigned UTM zone ' + self.ref['utm_zone'])
 
@@ -2256,6 +2286,7 @@ def parse_crosslines(self):
 		track_new ={}
 
 		# update progress bar and log
+		self.show_progress_dialog()
 		self.calc_pb.setValue(0)  # reset progress bar to 0 and max to number of files
 		self.calc_pb.setMaximum(len(fnames_new))
 
@@ -2409,6 +2440,7 @@ def parse_crosslines(self):
 		self.current_file_lbl.setText('Current File [' + str(f + 1) + '/' + str(num_new_files) +
 									  ']: Finished parsing crosslines')
 		self.calc_pb.setStyleSheet("")  # restore default progress bar styling
+		self.hide_progress_dialog()
 
 	self.calc_accuracy_btn.setStyleSheet("color: black; font-weight: normal")  # reset the button text color to default
 
@@ -2822,6 +2854,12 @@ def calc_dz_from_ref_interp(self):
 	# calculate the difference of each sounding from the reference grid (interpolated onto sounding X, Y position)
 	update_log(self, 'Calculating ref grid depths at crossline sounding positions')
 
+	if not getattr(self, 'ref', None) or 'z_grid' not in self.ref:
+		update_log(self, 'WARNING: Reference surface grids not available for interpolation', font_color="red")
+		return
+
+	calc_ref_mask(self)
+
 	# Some workflows can leave xline without converted UTM keys ('e'/'n').
 	# Fall back to parsed coordinate keys instead of hard-failing.
 	e_key = next((k for k in ['e', 'x', 'ping_e'] if k in self.xline), None)
@@ -3018,7 +3056,7 @@ def bin_beamwise(self, refresh_plot=False):
 				self.beam_bin_dz_wd_std.append(np.nan)
 				self.beam_bin_dz_wd_zero.append(np.nan)
 			self.dz_wd_bin_zero_mean = []
-			self.bin_count_mask = np.ones_like(beam_array, dtype=bool)  # All soundings valid when no data
+			self.bin_count_mask = np.zeros_like(beam_array, dtype=bool)
 			return
 
 		min_bin_count = 0  # minimum number of soundings per bin; zero if not selected by user
@@ -3466,6 +3504,37 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 		print('Applied bin count filter, remaining soundings:', np.sum(real_filt_idx))
 	else:
 		print('DEBUG: bin_count_mask does not exist')
+
+	n_filtered = int(np.sum(real_filt_idx))
+	dz_wd_bin_zero_mean_len = len(self.dz_wd_bin_zero_mean)
+	n_soundings = len(self.xline['beam_angle'])
+	if n_filtered == 0 or (dz_wd_bin_zero_mean_len > 0 and dz_wd_bin_zero_mean_len != n_soundings):
+		update_log(self, 'No soundings remain after crossline filtering; showing bin statistics only')
+		self.N_plotted = 0
+		self.ax1.plot(beam_bin_centers, beam_bin_dz_wd_std, '-', linewidth=self.lwidth, color='b', label='Std. Dev.')
+		if hasattr(self, 'flatten_mean_gb') and self.flatten_mean_gb.isChecked():
+			if hasattr(self, 'set_zero_mean_chk') and self.set_zero_mean_chk.isChecked():
+				self.ax2.plot(beam_bin_centers, np.asarray(self.beam_bin_dz_wd_zero), '-',
+							  linewidth=self.lwidth, color='r', label='Mean Bias')
+			else:
+				self.ax2.plot(beam_bin_centers, np.add(np.asarray(self.beam_bin_dz_wd_zero), 0), '-',
+							  linewidth=self.lwidth, color='r', label='Mean Bias')
+		else:
+			self.ax2.plot(beam_bin_centers, self.beam_bin_dz_wd_mean, '-',
+						  linewidth=self.lwidth, color='r', label='Mean Bias')
+		self.ax2.text(0.5, 0.5, 'No soundings remain after filtering',
+					  ha='center', va='center', transform=self.ax2.transAxes, fontsize=10,
+					  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+		plot_bathymetric_orders(self)
+		plot_soundings_per_bin(self)
+		plot_ping_soundings_distribution(self)
+		if hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked():
+			self.ax1.legend(loc='upper right', fontsize=8)
+			self.ax2.legend(loc='upper right', fontsize=8)
+		if set_active_tab:
+			self.plot_tabs.setCurrentIndex(0)
+		return
+
 	real_beam_angle = np.asarray(self.xline['beam_angle'])[real_filt_idx].tolist()  # real, filtered beam angles
 	real_dz_ref_wd = np.asarray(self.xline['dz_ref_wd'])[real_filt_idx].tolist()  # real, filtered dz results as %WD
 	real_dz_ref = np.asarray(self.xline['dz_ref'])[real_filt_idx].tolist()  # real, filtered dz results in meters
@@ -3475,7 +3544,11 @@ def plot_accuracy(self, set_active_tab=False):  # plot the accuracy results
 	# offsets to apply to each real, filtered sounding to plot with zero mean
 	print('size of real_filt_idx is', np.size(real_filt_idx))
 	print('len of self.dz_wd_bin_zero_mean is', len(self.dz_wd_bin_zero_mean))
-	real_dz_wd_bin_zero_mean = np.asarray(self.dz_wd_bin_zero_mean)[real_filt_idx].tolist()  # real, filtered dz results as %WD when forcing mean to zero
+	if dz_wd_bin_zero_mean_len != n_soundings:
+		update_log(self, 'WARNING: Bin zero-mean array length mismatch; skipping per-sounding plot adjustments')
+		real_dz_wd_bin_zero_mean = [0.0] * n_filtered
+	else:
+		real_dz_wd_bin_zero_mean = np.asarray(self.dz_wd_bin_zero_mean)[real_filt_idx].tolist()  # real, filtered dz results as %WD when forcing mean to zero
 	# print('got real_dz_wd_bin_zero_mean =', real_dz_wd_bin_zero_mean)
 	print('len of real_dz_wd_bin_zero_mean is', len(real_dz_wd_bin_zero_mean))
 	### THIS WORKS FOR CALCULATING MEAN ACROSS ALL BINS
@@ -4272,8 +4345,8 @@ def save_plot(self):
 			print(f"Error saving plot: {str(e)}")
 
 
-def save_all_plots(self):
-	# Save all plot tabs as separate files
+def save_analysis(self):
+	# Save all plot tabs as separate files and write analysis JSON alongside them
 	# Load last used plot settings
 	config = load_session_config()
 	last_basename = config.get("last_plot_basename", "swath_accuracy_plots")
@@ -4361,6 +4434,14 @@ def save_all_plots(self):
 			filepath = os.path.join(output_subdir, filename)
 			if os.path.exists(filepath):
 				existing_files.append(filename)
+	analysis_filename = f"{basename}_analysis.json"
+	analysis_filepath = os.path.join(output_subdir, analysis_filename)
+	if os.path.exists(analysis_filepath):
+		existing_files.append(analysis_filename)
+	info_filename = f"{basename}_info.txt"
+	info_filepath = os.path.join(output_subdir, info_filename)
+	if os.path.exists(info_filepath):
+		existing_files.append(info_filename)
 	
 	# Ask user for permission to overwrite if files exist
 	if existing_files:
@@ -4404,9 +4485,6 @@ def save_all_plots(self):
 	
 	# Save info text file
 	try:
-		info_filename = f"{basename}_info.txt"
-		info_filepath = os.path.join(output_subdir, info_filename)
-		
 		with open(info_filepath, 'w') as f:
 			f.write("SWATH ACCURACY PLOTTER - EXPORT INFORMATION\n")
 			f.write("=" * 50 + "\n\n")
@@ -4545,6 +4623,24 @@ def save_all_plots(self):
 	except Exception as e:
 		update_log(self, f'Error saving info file: {str(e)}')
 		print(f"Error saving info file: {str(e)}")
+
+	# Save analysis JSON with relative file paths
+	try:
+		analysis_data = build_analysis_data(self, analysis_dir=output_subdir, basename=basename)
+		with open(analysis_filepath, 'w') as f:
+			json.dump(analysis_data, f, indent=2)
+		update_log(self, f'Saved analysis settings: {analysis_filename}')
+	except Exception as e:
+		update_log(self, f'Error saving analysis file: {str(e)}')
+		print(f"Error saving analysis file: {str(e)}")
+
+	update_log(self, f'Saved {saved_count} plot(s) and analysis to: {output_subdir}')
+	update_last_directory('last_analysis_directory', parent_dir)
+
+
+def save_all_plots(self):
+	"""Backward-compatible alias for save_analysis."""
+	save_analysis(self)
 
 
 def clear_plot(self, refresh_list=['ref', 'acc', 'tide']):
@@ -5181,14 +5277,324 @@ def load_default_filters(self):
 		print(f"Error loading default filters: {str(e)}")
 
 
+def _path_to_analysis_relative(path, analysis_dir):
+	"""Convert an absolute file path to a path relative to the analysis folder."""
+	if not path:
+		return ''
+	path = os.path.normpath(path)
+	if not analysis_dir:
+		return path
+	try:
+		return os.path.relpath(path, os.path.normpath(analysis_dir))
+	except ValueError:
+		return path
+
+
+def _resolve_analysis_path(path, analysis_dir):
+	"""Resolve a saved analysis path relative to the analysis folder."""
+	if not path:
+		return ''
+	if os.path.isabs(path):
+		return os.path.normpath(path)
+	return os.path.normpath(os.path.join(os.path.normpath(analysis_dir), path))
+
+
+def _get_plot_settings_dict(self):
+	return {
+		'custom_info_enabled': self.custom_info_gb.isChecked(),
+		'model': self.model_cbox.currentText(),
+		'ship_name': self.ship_tb.text(),
+		'cruise_name': self.cruise_tb.text(),
+		'show_model': self.show_model_chk.isChecked(),
+		'show_ship': self.show_ship_chk.isChecked(),
+		'show_cruise': self.show_cruise_chk.isChecked(),
+		'reference_data': self.ref_cbox.currentText(),
+		'ref_utm_zone': self.ref_proj_cbox.currentText() if hasattr(self, 'ref_proj_cbox') else '',
+		'tide_units': self.tide_unit_cbox.currentText(),
+		'waterline_adjustment': self.waterline_tb.text(),
+		'point_size': self.pt_size_cbox.currentText(),
+		'point_size_coverage': self.pt_size_cov_cbox.currentText(),
+		'point_opacity_accuracy': self.pt_alpha_acc_tb.text(),
+		'point_opacity_coverage': self.pt_alpha_cov_tb.text(),
+		'custom_plot_limits': self.plot_lim_gb.isChecked(),
+		'max_beam_angle': self.max_beam_angle_tb.text(),
+		'angle_spacing': self.angle_spacing_tb.text(),
+		'max_bias': self.max_bias_tb.text(),
+		'max_std': self.max_std_tb.text(),
+		'axis_margin': self.axis_margin_tb.text(),
+		'show_acc_proc_text': self.show_acc_proc_text_chk.isChecked(),
+		'show_ref_proc_text': self.show_ref_proc_text_chk.isChecked(),
+		'show_grid_lines': self.grid_lines_toggle_chk.isChecked(),
+		'show_IHO_lines': self.IHO_lines_toggle_chk.isChecked(),
+		'update_ref_plots': self.update_ref_plots_chk.isChecked(),
+		'show_xline_coverage': self.show_xline_cov_chk.isChecked(),
+		'show_uncertainty_plot': self.show_u_plot_chk.isChecked(),
+		'show_accuracy_legend': hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked(),
+		'show_shaded_relief': self.show_shaded_relief_chk.isChecked(),
+		'scale_loaded_data_colors': hasattr(self, 'scale_loaded_depth_colors_chk') and self.scale_loaded_depth_colors_chk.isChecked(),
+		'show_special_order': self.show_special_order_chk.isChecked(),
+		'show_order_1a': self.show_order_1a_chk.isChecked(),
+		'show_order_1b': self.show_order_1b_chk.isChecked(),
+		'show_order_2': self.show_order_2_chk.isChecked(),
+		'show_order_3': self.show_order_3_chk.isChecked(),
+		'unique_line_pt_colors': hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked(),
+		'flatten_mean_enabled': self.flatten_mean_gb.isChecked(),
+		'force_zero_mean': self.set_zero_mean_chk.isChecked(),
+		'mean_bias_angle_limit': self.mean_bias_angle_lim_tb.text(),
+	}
+
+
+def _get_filter_settings_dict(self):
+	return {
+		'ref_depth_enabled': self.depth_ref_gb.isChecked(),
+		'ref_depth_min': self.min_depth_ref_tb.text(),
+		'ref_depth_max': self.max_depth_ref_tb.text(),
+		'ref_slope_enabled': self.slope_gb.isChecked(),
+		'ref_slope_max': self.max_slope_tb.text(),
+		'ref_slope_window': self.slope_win_cbox.currentText(),
+		'ref_density_enabled': self.density_gb.isChecked(),
+		'ref_density_min': self.min_dens_tb.text(),
+		'ref_uncertainty_enabled': self.uncertainty_gb.isChecked(),
+		'ref_uncertainty_max': self.max_u_tb.text(),
+		'xline_depth_enabled': self.depth_xline_gb.isChecked(),
+		'xline_depth_min': self.min_depth_xline_tb.text(),
+		'xline_depth_max': self.max_depth_xline_tb.text(),
+		'xline_angle_enabled': self.angle_xline_gb.isChecked(),
+		'xline_angle_min': self.min_angle_xline_tb.text(),
+		'xline_angle_max': self.max_angle_xline_tb.text(),
+		'xline_bs_enabled': self.bs_xline_gb.isChecked(),
+		'xline_bs_min': self.min_bs_xline_tb.text(),
+		'xline_bs_max': self.max_bs_xline_tb.text(),
+		'xline_min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
+		'xline_min_ping_soundings': self.min_ping_soundings_tb.text(),
+		'xline_min_ping_valid_pct_enabled': self.min_ping_valid_pct_gb.isChecked(),
+		'xline_min_ping_valid_pct': self.min_ping_valid_pct_tb.text(),
+		'xline_dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
+		'xline_dz_max': self.max_dz_tb.text(),
+		'xline_dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
+		'xline_dz_wd_max': self.max_dz_wd_tb.text(),
+		'xline_depth_mode_enabled': self.depth_mode_gb.isChecked(),
+		'xline_depth_mode': self.depth_mode_cbox.currentText(),
+		'xline_bin_count_enabled': self.bin_count_gb.isChecked(),
+		'xline_bin_count_min': self.min_bin_count_tb.text(),
+		'pt_count_enabled': self.pt_count_gb.isChecked(),
+		'pt_count_max': self.max_count_tb.text(),
+		'pt_count_dec_fac': self.dec_fac_tb.text(),
+		'bin_decimation_enabled': hasattr(self, 'bin_decimation_gb') and self.bin_decimation_gb.isChecked(),
+		'bin_decimation_max_points': hasattr(self, 'max_points_per_bin_tb') and self.max_points_per_bin_tb.text() or '350',
+	}
+
+
+def build_analysis_data(self, analysis_dir=None, basename=''):
+	"""Build a serializable analysis dict from the current application state."""
+	get_current_file_list(self)
+
+	def rel(path):
+		return _path_to_analysis_relative(path, analysis_dir) if analysis_dir else path
+
+	return {
+		'saved_timestamp': datetime.now().isoformat(),
+		'version': '1.0',
+		'analysis_type': 'swath_accuracy',
+		'basename': basename,
+		'files': {
+			'crossline_files': [rel(f) for f in getattr(self, 'filenames', [])],
+			'reference_surface_file': rel(getattr(self, 'ref_surf_file', '')),
+			'density_surface_file': rel(getattr(self, 'dens_surf_file', '')),
+			'tide_file': rel(getattr(self, 'tide_file', '')),
+		},
+		'plot_settings': _get_plot_settings_dict(self),
+		'filter_settings': _get_filter_settings_dict(self),
+	}
+
+
+def clear_analysis_state(self):
+	"""Clear crosslines, reference, density, and tide before loading a saved analysis."""
+	clear_files(self)
+	self.ref = {}
+	self.ref_surf_file = ''
+	self.ref_utm_str = 'N/A'
+	if hasattr(self, 'ref_proj_cbox'):
+		self.ref_proj_cbox.setCurrentIndex(0)
+	if hasattr(self, 'ref_surf_tb'):
+		self.ref_surf_tb.setText('No reference surface loaded')
+	self.dens_surf_file = ''
+	if hasattr(self, 'dens_surf_tb'):
+		self.dens_surf_tb.setText('No density surface loaded')
+	self.tide = {}
+	self.tide_file = ''
+	self.tide_applied = False
+	if hasattr(self, 'tide_file_tb'):
+		self.tide_file_tb.setText('No tide file loaded')
+
+
+def apply_plot_settings_from_dict(self, plot_settings):
+	if plot_settings.get('custom_info_enabled', False):
+		self.custom_info_gb.setChecked(True)
+	self.model_cbox.setCurrentText(plot_settings.get('model', ''))
+	self.ship_tb.setText(plot_settings.get('ship_name', ''))
+	self.cruise_tb.setText(plot_settings.get('cruise_name', ''))
+	self.show_model_chk.setChecked(plot_settings.get('show_model', True))
+	self.show_ship_chk.setChecked(plot_settings.get('show_ship', True))
+	self.show_cruise_chk.setChecked(plot_settings.get('show_cruise', True))
+	self.ref_cbox.setCurrentText(plot_settings.get('reference_data', ''))
+	ref_utm = plot_settings.get('ref_utm_zone', '')
+	if ref_utm:
+		set_ref_utm_zone(self, ref_utm)
+	self.tide_unit_cbox.setCurrentText(plot_settings.get('tide_units', ''))
+	self.waterline_tb.setText(plot_settings.get('waterline_adjustment', '0.00'))
+	self.pt_size_cbox.setCurrentText(plot_settings.get('point_size', '1'))
+	self.pt_size_cov_cbox.setCurrentText(plot_settings.get('point_size_coverage', '5'))
+	if 'point_opacity_accuracy' in plot_settings:
+		self.pt_alpha_acc_tb.setText(plot_settings.get('point_opacity_accuracy', '100'))
+		self.pt_alpha_cov_tb.setText(plot_settings.get('point_opacity_coverage', '6'))
+	else:
+		old_opacity = plot_settings.get('point_opacity', '100')
+		self.pt_alpha_acc_tb.setText(old_opacity)
+		self.pt_alpha_cov_tb.setText(old_opacity)
+	self.plot_lim_gb.setChecked(plot_settings.get('custom_plot_limits', False))
+	self.max_beam_angle_tb.setText(plot_settings.get('max_beam_angle', ''))
+	self.angle_spacing_tb.setText(plot_settings.get('angle_spacing', ''))
+	self.max_bias_tb.setText(plot_settings.get('max_bias', ''))
+	self.max_std_tb.setText(plot_settings.get('max_std', ''))
+	self.axis_margin_tb.setText(plot_settings.get('axis_margin', ''))
+	self.show_acc_proc_text_chk.setChecked(plot_settings.get('show_acc_proc_text', False))
+	self.show_ref_proc_text_chk.setChecked(plot_settings.get('show_ref_proc_text', False))
+	self.grid_lines_toggle_chk.setChecked(plot_settings.get('show_grid_lines', True))
+	self.IHO_lines_toggle_chk.setChecked(plot_settings.get('show_IHO_lines', True))
+	self.update_ref_plots_chk.setChecked(plot_settings.get('update_ref_plots', True))
+	self.show_xline_cov_chk.setChecked(plot_settings.get('show_xline_coverage', True))
+	self.show_u_plot_chk.setChecked(plot_settings.get('show_uncertainty_plot', True))
+	if hasattr(self, 'show_accuracy_legend_chk'):
+		self.show_accuracy_legend_chk.setChecked(plot_settings.get('show_accuracy_legend', True))
+	self.show_shaded_relief_chk.setChecked(plot_settings.get('show_shaded_relief', True))
+	if hasattr(self, 'scale_loaded_depth_colors_chk'):
+		self.scale_loaded_depth_colors_chk.setChecked(
+			plot_settings.get('scale_loaded_data_colors', plot_settings.get('scale_loaded_depth_colors', True))
+		)
+	self.show_special_order_chk.setChecked(plot_settings.get('show_special_order', False))
+	self.show_order_1a_chk.setChecked(plot_settings.get('show_order_1a', False))
+	self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
+	self.show_order_2_chk.setChecked(plot_settings.get('show_order_2', False))
+	self.show_order_3_chk.setChecked(plot_settings.get('show_order_3', False))
+	if hasattr(self, 'unique_line_pt_colors_chk'):
+		self.unique_line_pt_colors_chk.setChecked(plot_settings.get('unique_line_pt_colors', False))
+	self.flatten_mean_gb.setChecked(plot_settings.get('flatten_mean_enabled', False))
+	self.set_zero_mean_chk.setChecked(plot_settings.get('force_zero_mean', False))
+	self.mean_bias_angle_lim_tb.setText(plot_settings.get('mean_bias_angle_limit', '40'))
+
+
+def apply_filter_settings_from_dict(self, filter_settings):
+	self.depth_ref_gb.setChecked(filter_settings.get('ref_depth_enabled', False))
+	self.min_depth_ref_tb.setText(filter_settings.get('ref_depth_min', '0'))
+	self.max_depth_ref_tb.setText(filter_settings.get('ref_depth_max', '10000'))
+	self.slope_gb.setChecked(filter_settings.get('ref_slope_enabled', False))
+	self.max_slope_tb.setText(filter_settings.get('ref_slope_max', '5'))
+	slope_window = filter_settings.get('ref_slope_window', '3x3')
+	slope_idx = self.slope_win_cbox.findText(slope_window)
+	if slope_idx >= 0:
+		self.slope_win_cbox.setCurrentIndex(slope_idx)
+	self.density_gb.setChecked(filter_settings.get('ref_density_enabled', False))
+	self.min_dens_tb.setText(filter_settings.get('ref_density_min', '10'))
+	self.uncertainty_gb.setChecked(filter_settings.get('ref_uncertainty_enabled', False))
+	self.max_u_tb.setText(filter_settings.get('ref_uncertainty_max', '10'))
+	self.depth_xline_gb.setChecked(filter_settings.get('xline_depth_enabled', False))
+	self.min_depth_xline_tb.setText(filter_settings.get('xline_depth_min', '0'))
+	self.max_depth_xline_tb.setText(filter_settings.get('xline_depth_max', '10000'))
+	self.angle_xline_gb.setChecked(filter_settings.get('xline_angle_enabled', False))
+	self.min_angle_xline_tb.setText(filter_settings.get('xline_angle_min', '-75'))
+	self.max_angle_xline_tb.setText(filter_settings.get('xline_angle_max', '75'))
+	self.bs_xline_gb.setChecked(filter_settings.get('xline_bs_enabled', False))
+	self.min_bs_xline_tb.setText(filter_settings.get('xline_bs_min', '-50'))
+	self.max_bs_xline_tb.setText(filter_settings.get('xline_bs_max', '0'))
+	self.min_ping_soundings_gb.setChecked(filter_settings.get('xline_min_ping_soundings_enabled', False))
+	self.min_ping_soundings_tb.setText(filter_settings.get('xline_min_ping_soundings', '5'))
+	self.min_ping_valid_pct_gb.setChecked(filter_settings.get('xline_min_ping_valid_pct_enabled', False))
+	self.min_ping_valid_pct_tb.setText(filter_settings.get('xline_min_ping_valid_pct', '98'))
+	if hasattr(self, 'dz_abs_gb'):
+		self.dz_abs_gb.setChecked(filter_settings.get('xline_dz_abs_enabled', False))
+	self.max_dz_tb.setText(filter_settings.get('xline_dz_max', '10'))
+	if hasattr(self, 'dz_pct_gb'):
+		self.dz_pct_gb.setChecked(filter_settings.get('xline_dz_pct_enabled', False))
+	self.max_dz_wd_tb.setText(filter_settings.get('xline_dz_wd_max', '5'))
+	self.depth_mode_gb.setChecked(filter_settings.get('xline_depth_mode_enabled', False))
+	depth_mode = filter_settings.get('xline_depth_mode', 'None')
+	depth_mode_idx = self.depth_mode_cbox.findText(depth_mode)
+	if depth_mode_idx >= 0:
+		self.depth_mode_cbox.setCurrentIndex(depth_mode_idx)
+	self.bin_count_gb.setChecked(filter_settings.get('xline_bin_count_enabled', True))
+	self.min_bin_count_tb.setText(filter_settings.get('xline_bin_count_min', '10'))
+	self.pt_count_gb.setChecked(filter_settings.get('pt_count_enabled', False))
+	self.max_count_tb.setText(filter_settings.get('pt_count_max', '50000'))
+	self.dec_fac_tb.setText(filter_settings.get('pt_count_dec_fac', '1'))
+	if hasattr(self, 'bin_decimation_gb'):
+		self.bin_decimation_gb.setChecked(filter_settings.get('bin_decimation_enabled', True))
+	if hasattr(self, 'max_points_per_bin_tb'):
+		self.max_points_per_bin_tb.setText(filter_settings.get('bin_decimation_max_points', '350'))
+
+
+def load_analysis_files_from_dict(self, files, analysis_dir):
+	"""Load crossline, reference, density, and tide files from an analysis dict."""
+	crossline_paths = []
+	for rel_path in files.get('crossline_files', []):
+		file_path = _resolve_analysis_path(rel_path, analysis_dir)
+		if os.path.exists(file_path):
+			crossline_paths.append(file_path)
+		else:
+			update_log(self, f'Warning: Crossline file not found: {file_path}')
+	if crossline_paths:
+		update_file_list(self, crossline_paths, verbose=True)
+
+	ref_file = _resolve_analysis_path(files.get('reference_surface_file', ''), analysis_dir)
+	if ref_file and os.path.exists(ref_file):
+		self.ref_surf_file = ref_file
+		if hasattr(self, 'ref_surf_tb'):
+			self.ref_surf_tb.setText(os.path.basename(ref_file))
+		if self.ref_utm_str in ('', 'N/A'):
+			if not set_ref_utm_from_filename(self, ref_file):
+				update_log(self, 'Please verify the reference surface UTM zone')
+		parse_ref_depth(self)
+		make_ref_surf(self)
+		calc_ref_mask(self)
+	elif ref_file:
+		update_log(self, f'Warning: Reference surface file not found: {ref_file}')
+
+	dens_file = _resolve_analysis_path(files.get('density_surface_file', ''), analysis_dir)
+	if dens_file and os.path.exists(dens_file):
+		self.dens_surf_file = dens_file
+		if hasattr(self, 'dens_surf_tb'):
+			self.dens_surf_tb.setText(os.path.basename(dens_file))
+		process_dens_file(self)
+	elif dens_file:
+		update_log(self, f'Warning: Density surface file not found: {dens_file}')
+
+	tide_file = _resolve_analysis_path(files.get('tide_file', ''), analysis_dir)
+	if tide_file and os.path.exists(tide_file):
+		self.tide_file = tide_file
+		if hasattr(self, 'tide_file_tb'):
+			self.tide_file_tb.setText(os.path.basename(tide_file))
+		process_tide(self)
+	elif tide_file:
+		update_log(self, f'Warning: Tide file not found: {tide_file}')
+
+
+def apply_analysis_data(self, analysis_data, analysis_dir):
+	"""Apply saved plot/filter settings and reload data files."""
+	apply_plot_settings_from_dict(self, analysis_data.get('plot_settings', {}))
+	apply_filter_settings_from_dict(self, analysis_data.get('filter_settings', {}))
+	load_analysis_files_from_dict(self, analysis_data.get('files', {}), analysis_dir)
+
+
 def get_session_default_directory(self):
 	"""Get the best default directory for session files - either last session directory or last plot directory"""
 	config = load_session_config()
+	last_analysis_dir = config.get("last_analysis_directory", "")
 	last_session_dir = config.get("last_session_dir", "")
 	last_plot_dir = config.get("last_plot_directory", "")
 	
-	# Prefer the plot directory if it exists and is more recent, otherwise use session directory
-	if last_plot_dir and os.path.exists(last_plot_dir):
+	if last_analysis_dir and os.path.exists(last_analysis_dir):
+		return last_analysis_dir
+	elif last_plot_dir and os.path.exists(last_plot_dir):
 		return last_plot_dir
 	elif last_session_dir and os.path.exists(last_session_dir):
 		return last_session_dir
@@ -5220,125 +5626,7 @@ def save_session(self):
 		if not file_path:
 			return  # User cancelled
 		
-		# Get current file list
-		from file_fun import get_current_file_list
-		get_current_file_list(self)
-		
-		# Collect all session data
-		session_data = {
-			'saved_timestamp': datetime.now().isoformat(),
-			'version': '1.0',
-			
-			# File paths
-			'files': {
-				'crossline_files': getattr(self, 'filenames', []),
-				'reference_surface_file': getattr(self, 'ref_surf_file', ''),
-				'density_surface_file': getattr(self, 'dens_surf_file', ''),
-				'tide_file': getattr(self, 'tide_file', ''),
-				'output_directory': self.output_dir
-			},
-			
-			# Plot settings (from Plot tab)
-			'plot_settings': {
-				# Custom info
-				'custom_info_enabled': self.custom_info_gb.isChecked(),
-				'model': self.model_cbox.currentText(),
-				'ship_name': self.ship_tb.text(),
-				'cruise_name': self.cruise_tb.text(),
-				'show_model': self.show_model_chk.isChecked(),
-				'show_ship': self.show_ship_chk.isChecked(),
-				'show_cruise': self.show_cruise_chk.isChecked(),
-				
-				# Data reference
-				'reference_data': self.ref_cbox.currentText(),
-				'tide_units': self.tide_unit_cbox.currentText(),
-				'waterline_adjustment': self.waterline_tb.text(),
-				
-				# Point style
-				'point_size': self.pt_size_cbox.currentText(),
-				'point_size_coverage': self.pt_size_cov_cbox.currentText(),
-				'point_opacity_accuracy': self.pt_alpha_acc_tb.text(),
-				'point_opacity_coverage': self.pt_alpha_cov_tb.text(),
-				
-				# Plot limits
-				'custom_plot_limits': self.plot_lim_gb.isChecked(),
-				'max_beam_angle': self.max_beam_angle_tb.text(),
-				'angle_spacing': self.angle_spacing_tb.text(),
-				'max_bias': self.max_bias_tb.text(),
-				'max_std': self.max_std_tb.text(),
-				'axis_margin': self.axis_margin_tb.text(),
-				
-				# Toggle options
-				'show_acc_proc_text': self.show_acc_proc_text_chk.isChecked(),
-				'show_ref_proc_text': self.show_ref_proc_text_chk.isChecked(),
-				'show_grid_lines': self.grid_lines_toggle_chk.isChecked(),
-				'show_IHO_lines': self.IHO_lines_toggle_chk.isChecked(),
-				'update_ref_plots': self.update_ref_plots_chk.isChecked(),
-				'show_xline_coverage': self.show_xline_cov_chk.isChecked(),
-				'show_uncertainty_plot': self.show_u_plot_chk.isChecked(),
-				'show_accuracy_legend': hasattr(self, 'show_accuracy_legend_chk') and self.show_accuracy_legend_chk.isChecked(),
-				'show_shaded_relief': self.show_shaded_relief_chk.isChecked(),
-				'scale_loaded_data_colors': hasattr(self, 'scale_loaded_depth_colors_chk') and self.scale_loaded_depth_colors_chk.isChecked(),
-				'show_special_order': self.show_special_order_chk.isChecked(),
-				'show_order_1a': self.show_order_1a_chk.isChecked(),
-				'show_order_1b': self.show_order_1b_chk.isChecked(),
-				'show_order_2': self.show_order_2_chk.isChecked(),
-				'show_order_3': self.show_order_3_chk.isChecked(),
-				'unique_line_pt_colors': hasattr(self, 'unique_line_pt_colors_chk') and self.unique_line_pt_colors_chk.isChecked(),
-				
-				# Flatten swath
-				'flatten_mean_enabled': self.flatten_mean_gb.isChecked(),
-				'force_zero_mean': self.set_zero_mean_chk.isChecked(),
-				'mean_bias_angle_limit': self.mean_bias_angle_lim_tb.text()
-			},
-			
-			# Filter settings (from Filter tab)
-			'filter_settings': {
-				# Reference surface filters
-				'ref_depth_enabled': self.depth_ref_gb.isChecked(),
-				'ref_depth_min': self.min_depth_ref_tb.text(),
-				'ref_depth_max': self.max_depth_ref_tb.text(),
-				'ref_slope_enabled': self.slope_gb.isChecked(),
-				'ref_slope_max': self.max_slope_tb.text(),
-				'ref_slope_window': self.slope_win_cbox.currentText(),
-				'ref_density_enabled': self.density_gb.isChecked(),
-				'ref_density_min': self.min_dens_tb.text(),
-				'ref_uncertainty_enabled': self.uncertainty_gb.isChecked(),
-				'ref_uncertainty_max': self.max_u_tb.text(),
-				
-				# Crossline filters
-				'xline_depth_enabled': self.depth_xline_gb.isChecked(),
-				'xline_depth_min': self.min_depth_xline_tb.text(),
-				'xline_depth_max': self.max_depth_xline_tb.text(),
-				'xline_angle_enabled': self.angle_xline_gb.isChecked(),
-				'xline_angle_min': self.min_angle_xline_tb.text(),
-				'xline_angle_max': self.max_angle_xline_tb.text(),
-				'xline_bs_enabled': self.bs_xline_gb.isChecked(),
-				'xline_bs_min': self.min_bs_xline_tb.text(),
-				'xline_bs_max': self.max_bs_xline_tb.text(),
-				'xline_min_ping_soundings_enabled': self.min_ping_soundings_gb.isChecked(),
-				'xline_min_ping_soundings': self.min_ping_soundings_tb.text(),
-				'xline_min_ping_valid_pct_enabled': self.min_ping_valid_pct_gb.isChecked(),
-				'xline_min_ping_valid_pct': self.min_ping_valid_pct_tb.text(),
-				'xline_dz_abs_enabled': hasattr(self, 'dz_abs_gb') and self.dz_abs_gb.isChecked(),
-				'xline_dz_max': self.max_dz_tb.text(),
-				'xline_dz_pct_enabled': hasattr(self, 'dz_pct_gb') and self.dz_pct_gb.isChecked(),
-				'xline_dz_wd_max': self.max_dz_wd_tb.text(),
-				'xline_depth_mode_enabled': self.depth_mode_gb.isChecked(),
-				'xline_depth_mode': self.depth_mode_cbox.currentText(),
-				'xline_bin_count_enabled': self.bin_count_gb.isChecked(),
-				'xline_bin_count_min': self.min_bin_count_tb.text(),
-				
-				# Point count settings
-				'pt_count_enabled': self.pt_count_gb.isChecked(),
-				'pt_count_max': self.max_count_tb.text(),
-				'pt_count_dec_fac': self.dec_fac_tb.text(),
-				
-				# Bin decimation settings
-				'bin_decimation_enabled': hasattr(self, 'bin_decimation_gb') and self.bin_decimation_gb.isChecked(),
-				'bin_decimation_max_points': hasattr(self, 'max_points_per_bin_tb') and self.max_points_per_bin_tb.text() or '350'
-			}
-		}
+		session_data = build_analysis_data(self)
 		
 		# Save to file
 		with open(file_path, 'w') as f:
@@ -5379,195 +5667,70 @@ def load_session(self):
 		with open(file_path, 'r') as f:
 			session_data = json.load(f)
 		
-		# Clear current files
 		clear_files(self)
-		
-		# Load files
-		files = session_data.get('files', {})
-		
-		# Load crossline files
-		crossline_files = files.get('crossline_files', [])
-		for file_path in crossline_files:
-			if os.path.exists(file_path):
-				self.file_list.add_file(file_path)
-			else:
-				update_log(self, f'Warning: Crossline file not found: {file_path}')
-		
-		# Load reference surface file
-		ref_file = files.get('reference_surface_file', '')
-		if ref_file and os.path.exists(ref_file):
-			self.ref_surf_file = ref_file
-			parse_ref_depth(self)
-		elif ref_file:
-			update_log(self, f'Warning: Reference surface file not found: {ref_file}')
-		
-		# Load density surface file
-		dens_file = files.get('density_surface_file', '')
-		if dens_file and os.path.exists(dens_file):
-			self.dens_surf_file = dens_file
-			parse_ref_dens(self)
-		elif dens_file:
-			update_log(self, f'Warning: Density surface file not found: {dens_file}')
-		
-		# Load tide file
-		tide_file = files.get('tide_file', '')
-		if tide_file and os.path.exists(tide_file):
-			self.tide_file = tide_file
-			process_tide(self)
-		elif tide_file:
-			update_log(self, f'Warning: Tide file not found: {tide_file}')
-		
-		# Set output directory
-		output_dir = files.get('output_directory', '')
-		if output_dir and os.path.exists(output_dir):
-			self.output_dir = output_dir
-			self.current_outdir_lbl.setText('Current output directory:\n' + self.output_dir)
-		
-		# Load plot settings
-		plot_settings = session_data.get('plot_settings', {})
-		
-		# Custom info
-		if plot_settings.get('custom_info_enabled', False):
-			self.custom_info_gb.setChecked(True)
-		self.model_cbox.setCurrentText(plot_settings.get('model', ''))
-		self.ship_tb.setText(plot_settings.get('ship_name', ''))
-		self.cruise_tb.setText(plot_settings.get('cruise_name', ''))
-		self.show_model_chk.setChecked(plot_settings.get('show_model', True))
-		self.show_ship_chk.setChecked(plot_settings.get('show_ship', True))
-		self.show_cruise_chk.setChecked(plot_settings.get('show_cruise', True))
-		
-		# Data reference
-		self.ref_cbox.setCurrentText(plot_settings.get('reference_data', ''))
-		self.tide_unit_cbox.setCurrentText(plot_settings.get('tide_units', ''))
-		self.waterline_tb.setText(plot_settings.get('waterline_adjustment', '0.00'))
-		
-		# Point style
-		self.pt_size_cbox.setCurrentText(plot_settings.get('point_size', '1'))
-		self.pt_size_cov_cbox.setCurrentText(plot_settings.get('point_size_coverage', '5'))
-		# Handle both old and new opacity settings for backward compatibility
-		if 'point_opacity_accuracy' in plot_settings:
-			self.pt_alpha_acc_tb.setText(plot_settings.get('point_opacity_accuracy', '100'))
-			self.pt_alpha_cov_tb.setText(plot_settings.get('point_opacity_coverage', '6'))
-		else:
-			# Old format: single opacity value applies to both
-			old_opacity = plot_settings.get('point_opacity', '100')
-			self.pt_alpha_acc_tb.setText(old_opacity)
-			self.pt_alpha_cov_tb.setText(old_opacity)
-		
-		# Plot limits
-		self.plot_lim_gb.setChecked(plot_settings.get('custom_plot_limits', False))
-		self.max_beam_angle_tb.setText(plot_settings.get('max_beam_angle', ''))
-		self.angle_spacing_tb.setText(plot_settings.get('angle_spacing', ''))
-		self.max_bias_tb.setText(plot_settings.get('max_bias', ''))
-		self.max_std_tb.setText(plot_settings.get('max_std', ''))
-		self.axis_margin_tb.setText(plot_settings.get('axis_margin', ''))
-		
-		# Toggle options
-		self.show_acc_proc_text_chk.setChecked(plot_settings.get('show_acc_proc_text', False))
-		self.show_ref_proc_text_chk.setChecked(plot_settings.get('show_ref_proc_text', False))
-		self.grid_lines_toggle_chk.setChecked(plot_settings.get('show_grid_lines', True))
-		self.IHO_lines_toggle_chk.setChecked(plot_settings.get('show_IHO_lines', True))
-		self.update_ref_plots_chk.setChecked(plot_settings.get('update_ref_plots', True))
-		self.show_xline_cov_chk.setChecked(plot_settings.get('show_xline_coverage', True))
-		self.show_u_plot_chk.setChecked(plot_settings.get('show_uncertainty_plot', True))
-		if hasattr(self, 'show_accuracy_legend_chk'):
-			self.show_accuracy_legend_chk.setChecked(plot_settings.get('show_accuracy_legend', True))
-		self.show_shaded_relief_chk.setChecked(plot_settings.get('show_shaded_relief', True))
-		if hasattr(self, 'scale_loaded_depth_colors_chk'):
-			self.scale_loaded_depth_colors_chk.setChecked(
-				plot_settings.get('scale_loaded_data_colors', plot_settings.get('scale_loaded_depth_colors', True))
-			)
-		self.show_special_order_chk.setChecked(plot_settings.get('show_special_order', False))
-		self.show_order_1a_chk.setChecked(plot_settings.get('show_order_1a', False))
-		self.show_order_1b_chk.setChecked(plot_settings.get('show_order_1b', False))
-		self.show_order_2_chk.setChecked(plot_settings.get('show_order_2', False))
-		self.show_order_3_chk.setChecked(plot_settings.get('show_order_3', False))
-		if hasattr(self, 'unique_line_pt_colors_chk'):
-			self.unique_line_pt_colors_chk.setChecked(plot_settings.get('unique_line_pt_colors', False))
-		
-		# Flatten swath
-		self.flatten_mean_gb.setChecked(plot_settings.get('flatten_mean_enabled', False))
-		self.set_zero_mean_chk.setChecked(plot_settings.get('force_zero_mean', False))
-		self.mean_bias_angle_lim_tb.setText(plot_settings.get('mean_bias_angle_limit', '40'))
-		
-		# Load filter settings
-		filter_settings = session_data.get('filter_settings', {})
-		
-		# Reference surface filters
-		self.depth_ref_gb.setChecked(filter_settings.get('ref_depth_enabled', False))
-		self.min_depth_ref_tb.setText(filter_settings.get('ref_depth_min', '0'))
-		self.max_depth_ref_tb.setText(filter_settings.get('ref_depth_max', '10000'))
-		self.slope_gb.setChecked(filter_settings.get('ref_slope_enabled', False))
-		self.max_slope_tb.setText(filter_settings.get('ref_slope_max', '5'))
-		slope_window = filter_settings.get('ref_slope_window', '3x3')
-		slope_idx = self.slope_win_cbox.findText(slope_window)
-		if slope_idx >= 0:
-			self.slope_win_cbox.setCurrentIndex(slope_idx)
-		self.density_gb.setChecked(filter_settings.get('ref_density_enabled', False))
-		self.min_dens_tb.setText(filter_settings.get('ref_density_min', '10'))
-		self.uncertainty_gb.setChecked(filter_settings.get('ref_uncertainty_enabled', False))
-		self.max_u_tb.setText(filter_settings.get('ref_uncertainty_max', '10'))
-		
-		# Crossline filters
-		self.depth_xline_gb.setChecked(filter_settings.get('xline_depth_enabled', False))
-		self.min_depth_xline_tb.setText(filter_settings.get('xline_depth_min', '0'))
-		self.max_depth_xline_tb.setText(filter_settings.get('xline_depth_max', '10000'))
-		self.angle_xline_gb.setChecked(filter_settings.get('xline_angle_enabled', False))
-		self.min_angle_xline_tb.setText(filter_settings.get('xline_angle_min', '-75'))
-		self.max_angle_xline_tb.setText(filter_settings.get('xline_angle_max', '75'))
-		self.bs_xline_gb.setChecked(filter_settings.get('xline_bs_enabled', False))
-		self.min_bs_xline_tb.setText(filter_settings.get('xline_bs_min', '-50'))
-		self.max_bs_xline_tb.setText(filter_settings.get('xline_bs_max', '0'))
-		self.min_ping_soundings_gb.setChecked(filter_settings.get('xline_min_ping_soundings_enabled', False))
-		self.min_ping_soundings_tb.setText(filter_settings.get('xline_min_ping_soundings', '5'))
-		self.min_ping_valid_pct_gb.setChecked(filter_settings.get('xline_min_ping_valid_pct_enabled', False))
-		self.min_ping_valid_pct_tb.setText(filter_settings.get('xline_min_ping_valid_pct', '98'))
-		if hasattr(self, 'dz_abs_gb'):
-			self.dz_abs_gb.setChecked(filter_settings.get('xline_dz_abs_enabled', False))
-		self.max_dz_tb.setText(filter_settings.get('xline_dz_max', '10'))
-		if hasattr(self, 'dz_pct_gb'):
-			self.dz_pct_gb.setChecked(filter_settings.get('xline_dz_pct_enabled', False))
-		self.max_dz_wd_tb.setText(filter_settings.get('xline_dz_wd_max', '5'))
-		self.depth_mode_gb.setChecked(filter_settings.get('xline_depth_mode_enabled', False))
-		depth_mode = filter_settings.get('xline_depth_mode', 'None')
-		depth_mode_idx = self.depth_mode_cbox.findText(depth_mode)
-		if depth_mode_idx >= 0:
-			self.depth_mode_cbox.setCurrentIndex(depth_mode_idx)
-		self.bin_count_gb.setChecked(filter_settings.get('xline_bin_count_enabled', True))
-		self.min_bin_count_tb.setText(filter_settings.get('xline_bin_count_min', '10'))
-		
-		# Point count settings
-		self.pt_count_gb.setChecked(filter_settings.get('pt_count_enabled', False))
-		self.max_count_tb.setText(filter_settings.get('pt_count_max', '50000'))
-		self.dec_fac_tb.setText(filter_settings.get('pt_count_dec_fac', '1'))
-		
-		# Bin decimation settings
-		if hasattr(self, 'bin_decimation_gb'):
-			self.bin_decimation_gb.setChecked(filter_settings.get('bin_decimation_enabled', True))
-		if hasattr(self, 'max_points_per_bin_tb'):
-			self.max_points_per_bin_tb.setText(filter_settings.get('bin_decimation_max_points', '350'))
+		apply_analysis_data(self, session_data, os.path.dirname(file_path))
 		
 		# Force UI to process events
-		from PyQt6 import QtWidgets
 		QtWidgets.QApplication.processEvents()
 		
-		# Update buttons and recalculate if needed
 		update_buttons(self)
 		
-		# Recalculate accuracy if files are loaded
 		if self.file_list.count() > 0:
 			calc_accuracy(self)
 		
-		# Refresh plots
 		refresh_plot(self)
+		update_buttons(self)
 		
-		# Get timestamp
 		timestamp = session_data.get('saved_timestamp', 'Unknown')
 		update_log(self, f'Session loaded (saved: {timestamp})')
 		
 	except Exception as e:
 		update_log(self, f'Error loading session: {str(e)}')
 		print(f"Error loading session: {str(e)}")
+
+
+def load_analysis(self):
+	"""Load a saved analysis JSON file and restore settings and data files."""
+	try:
+		default_dir = get_session_default_directory(self)
+		file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+			self,
+			'Load Analysis',
+			default_dir,
+			'Analysis Files (*_analysis.json);;JSON Files (*.json);;All Files (*)'
+		)
+		
+		if not file_path:
+			return
+		
+		update_last_directory('last_analysis_directory', os.path.dirname(file_path))
+		
+		with open(file_path, 'r') as f:
+			analysis_data = json.load(f)
+		
+		analysis_dir = os.path.dirname(file_path)
+		clear_analysis_state(self)
+		apply_analysis_data(self, analysis_data, analysis_dir)
+		
+		QtWidgets.QApplication.processEvents()
+		update_buttons(self)
+
+		if getattr(self, 'ref', None) and 'z_grid' in self.ref:
+			calc_ref_mask(self)
+		
+		if self.file_list.count() > 0:
+			calc_accuracy(self)
+		
+		refresh_plot(self)
+		update_buttons(self)
+		
+		timestamp = analysis_data.get('saved_timestamp', 'Unknown')
+		basename = analysis_data.get('basename', os.path.basename(file_path))
+		update_log(self, f'Analysis loaded: {basename} (saved: {timestamp})')
+		
+	except Exception as e:
+		update_log(self, f'Error loading analysis: {str(e)}')
+		print(f"Error loading analysis: {str(e)}")
 
 
 def save_current_plot_settings(self):

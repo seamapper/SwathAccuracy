@@ -61,7 +61,7 @@ License:
 ===============================================================================
 """
 
-__version__ = "2026.06"
+__version__ = "2026.07"
 
 import sys
 import os
@@ -165,7 +165,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.clr_file_btn.clicked.connect(lambda: clear_files(self))
         self.show_path_chk.stateChanged.connect(lambda: show_file_paths(self))
         self.calc_accuracy_btn.clicked.connect(lambda: calc_accuracy(self))
-        self.save_all_plots_btn.clicked.connect(self.handle_save_all_plots)
+        self.load_analysis_btn.clicked.connect(self.handle_load_analysis)
+        self.save_analysis_btn.clicked.connect(self.handle_save_analysis)
         # self.ref_proj_cbox.activated.connect(lambda: parse_ref_depth(self))
         self.ref_proj_cbox.activated.connect(lambda: update_ref_utm_zone(self))
         self.slope_win_cbox.activated.connect(lambda: update_ref_slope(self))
@@ -567,18 +568,25 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.calc_accuracy_btn = PushButton('Calculate Accuracy', btnw, btnh, 'calc_accuracy_btn',
                                             'Calculate accuracy from loaded files')
-        self.save_all_plots_btn = PushButton('Save All Plots', btnw, btnh, 'save_all_plots_btn', 'Save all plot tabs')
-        self.calc_accuracy_btn.setMinimumWidth(0)
-        self.calc_accuracy_btn.setMaximumWidth(16777215)
-        self.calc_accuracy_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.save_all_plots_btn.setMinimumWidth(0)
-        self.save_all_plots_btn.setMaximumWidth(16777215)
-        self.save_all_plots_btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        plot_btn_row = QtWidgets.QHBoxLayout()
-        plot_btn_row.addWidget(self.calc_accuracy_btn, 1)
-        plot_btn_row.addWidget(self.save_all_plots_btn, 1)
+        self.load_analysis_btn = PushButton('Load Analysis', btnw, btnh, 'load_analysis_btn',
+                                            'Load a saved analysis JSON file and restore settings and data files')
+        self.save_analysis_btn = PushButton('Save Analysis', btnw, btnh, 'save_analysis_btn',
+                                            'Save all plot tabs and analysis settings to a folder')
+        for btn in [self.calc_accuracy_btn, self.load_analysis_btn, self.save_analysis_btn]:
+            btn.setMinimumWidth(0)
+            btn.setMaximumWidth(16777215)
+            btn.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+        calc_btn_row = QtWidgets.QHBoxLayout()
+        calc_btn_row.addWidget(self.calc_accuracy_btn, 1)
+        analysis_btn_row = QtWidgets.QHBoxLayout()
+        analysis_btn_row.addWidget(self.load_analysis_btn, 1)
+        analysis_btn_row.addWidget(self.save_analysis_btn, 1)
+        plot_btn_layout = QtWidgets.QVBoxLayout()
+        plot_btn_layout.addLayout(calc_btn_row)
+        plot_btn_layout.addLayout(analysis_btn_row)
         
-        plot_btn_gb = GroupBox('Plot Data', BoxLayout([plot_btn_row], 'v'),
+        plot_btn_gb = GroupBox('Data Analysis', BoxLayout([plot_btn_layout], 'v'),
                                False, False, 'plot_btn_gb')
         # plot_btn_gb.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.MinimumExpanding)
         
@@ -603,21 +611,19 @@ class MainWindow(QtWidgets.QMainWindow):
         log_gb = GroupBox('Activity Log', BoxLayout([self.log], 'v'), False, False, 'log_gb')
         log_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
 
-        # add progress bar for total file list and layout
-        self.current_file_lbl = Label('Current File:')
-        self.calc_pb = QtWidgets.QProgressBar()
-        self.calc_pb.setGeometry(0, 0, 100, 30)
-        self.calc_pb.setMaximum(100)  # this will update with number of files
-        self.calc_pb.setValue(0)
-        self.calc_pb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
-        # self.calc_pb.setMaximumSize(300,30)
-        # self.calc_pb.setMaximumWidth(500)
-        calc_pb_layout = BoxLayout([self.calc_pb], 'h')
-        self.prog_layout = BoxLayout([self.current_file_lbl], 'v')
-        self.prog_layout.addLayout(calc_pb_layout)
+        # progress bar and status label live in a dialog shown during active processing
+        self.progress_dialog = ProgressDialog(self)
+        self.current_file_lbl = self.progress_dialog.status_label
+        self.calc_pb = self.progress_dialog.progress_bar
 
         # set the left panel layout with file controls on top and log on bottom
-        self.left_layout = BoxLayout([ref_utm_gb, tide_btn_gb, file_gb, plot_btn_gb, log_gb, self.prog_layout], 'v')
+        self.left_layout = BoxLayout([ref_utm_gb, tide_btn_gb, file_gb, plot_btn_gb, log_gb], 'v')
+
+    def show_progress_dialog(self, title='Parsing Crossline Files'):
+        self.progress_dialog.show_progress(title)
+
+    def hide_progress_dialog(self):
+        self.progress_dialog.hide_progress()
 
     def set_center_layout(self):  # set center layout with swath coverage plot
         # add figure instance and layout for swath accuracy plots
@@ -1440,8 +1446,8 @@ class MainWindow(QtWidgets.QMainWindow):
         filter_buttons_layout.addWidget(self.save_filters_btn, 1)
         filter_buttons_layout.addWidget(self.load_last_filters_btn, 1)
         filter_buttons_layout.addWidget(self.default_filters_btn, 1)
-        self.filter_buttons_gb = GroupBox('Filter Settings', filter_buttons_layout, False, False, 'filter_buttons_gb')
-        self.filter_buttons_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
+        self.filter_buttons_row = QtWidgets.QWidget()
+        self.filter_buttons_row.setLayout(filter_buttons_layout)
 
         # set up tabs
         self.tabs = QtWidgets.QTabWidget()
@@ -1463,19 +1469,15 @@ class MainWindow(QtWidgets.QMainWindow):
         plot_settings_buttons_layout.addWidget(self.save_plot_settings_btn, 1)
         plot_settings_buttons_layout.addWidget(self.load_last_plot_settings_btn, 1)
         plot_settings_buttons_layout.addWidget(self.default_plot_settings_btn, 1)
-        self.plot_settings_buttons_gb = GroupBox('Plot Settings', plot_settings_buttons_layout, False, False, 'plot_settings_buttons_gb')
-        self.plot_settings_buttons_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
-
-        program_settings_layout = BoxLayout([self.plot_settings_buttons_gb, self.filter_buttons_gb], 'v')
-        self.program_settings_gb = GroupBox('Program Settings', program_settings_layout, False, False, 'program_settings_gb')
-        # Insert below Plot Data and above Activity Log in the left panel.
-        self.left_layout.insertWidget(4, self.program_settings_gb)
+        self.plot_settings_buttons_row = QtWidgets.QWidget()
+        self.plot_settings_buttons_row.setLayout(plot_settings_buttons_layout)
 
         # set up tab 1: plot options
         self.tab1 = QtWidgets.QWidget()
         self.tab1.layout = BoxLayout([self.custom_info_gb, self.data_ref_gb, pt_param_gb,
                                       self.plot_lim_gb, toggle_gb, self.flatten_mean_gb], 'v')
         self.tab1.layout.addStretch()
+        self.tab1.layout.addWidget(self.plot_settings_buttons_row)
         self.tab1.setLayout(self.tab1.layout)
 
         # set up tab 2: filtering options
@@ -1487,6 +1489,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tab2.layout = BoxLayout([tab2_ref_filter_gb, tab2_xline_filter_gb, self.pt_count_gb, self.bin_decimation_gb], 'v')
 
         self.tab2.layout.addStretch()
+        self.tab2.layout.addWidget(self.filter_buttons_row)
         self.tab2.setLayout(self.tab2.layout)
 
         # add tabs to tab layout
@@ -1891,11 +1894,10 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, 'survey_orders_dialog'):
             self.survey_orders_dialog.exec()
 
-    def handle_save_all_plots(self):
-        """Handle save all plots with validation for ship name and description"""
+    def handle_save_analysis(self):
+        """Handle save analysis with validation for ship name and description"""
         from PyQt6.QtWidgets import QMessageBox
         
-        # Check if ship name and description are filled out
         ship_name = self.ship_tb.text().strip()
         description = self.cruise_tb.text().strip()
         
@@ -1905,21 +1907,22 @@ class MainWindow(QtWidgets.QMainWindow):
         if not description:
             missing_fields.append("Description")
         
-        # If any fields are missing, show warning dialog
         if missing_fields:
             missing_text = " and ".join(missing_fields)
-            msg = f"The following information is missing: {missing_text}\n\nDo you really want to continue with exporting the plots?"
-            reply = QMessageBox.question(self, 'Missing Information', msg, 
+            msg = f"The following information is missing: {missing_text}\n\nDo you really want to continue with exporting the analysis?"
+            reply = QMessageBox.question(self, 'Missing Information', msg,
                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                         QMessageBox.StandardButton.No)
             
             if reply == QMessageBox.StandardButton.No:
-                return  # User chose not to continue
+                return
         
-        # If we get here, either all fields are filled or user chose to continue
-        # Call the original save_all_plots function
-        from libs.swath_accuracy_lib import save_all_plots
-        save_all_plots(self)
+        from libs.swath_accuracy_lib import save_analysis
+        save_analysis(self)
+
+    def handle_load_analysis(self):
+        from libs.swath_accuracy_lib import load_analysis
+        load_analysis(self)
 
 
 class NewPopup(QtWidgets.QWidget): # new class for additional plots

@@ -173,7 +173,7 @@ def update_file_list(self, fnames, verbose=True):
 	i = 0
 	for f in range(len(fnames_new)):  # add item with full file path as data field, show/hide path text
 		try:
-			[path, fname] = fnames_new[f].rsplit('/', 1)
+			path, fname = os.path.split(fnames_new[f])
 			if fname.rsplit('.', 1)[0]:  # add file only if name exists prior to ext (may pass splitext check if adding dir)
 				new_item = QtWidgets.QListWidgetItem()
 				new_item.setData(1, fnames_new[f])  # set full file path as data, role 1
@@ -181,7 +181,7 @@ def update_file_list(self, fnames, verbose=True):
 				show_path = False
 				if hasattr(self, 'show_path_chk'):
 					show_path = self.show_path_chk.isChecked()
-				new_item.setText((path + '/') * int(show_path) + fname)  # set text, show or hide path
+				new_item.setText((path + os.sep) * int(show_path) + fname)  # set text, show or hide path
 				self.file_list.addItem(new_item)
 				if verbose:
 					update_log(self, 'Added ' + fname)  # fnames_new[f].rsplit('/',1)[-1])
