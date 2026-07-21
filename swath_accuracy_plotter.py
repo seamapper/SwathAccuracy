@@ -90,6 +90,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
     media_path = os.path.join(os.path.dirname(__file__), "media")
     _pending_field_stylesheet = "QLineEdit { border: 2px solid #00ffff; }"
+    LEFT_PANEL_MIN_WIDTH = 320
+    RIGHT_PANEL_MIN_WIDTH = 340
+    DEFAULT_WINDOW_WIDTH = 1700
+    DEFAULT_WINDOW_HEIGHT = 1100
+    MIN_WINDOW_WIDTH = 900
+    MIN_WINDOW_HEIGHT = 700
 
     def __init__(self, parent=None):
         print("MainWindow __init__ called")
@@ -99,8 +105,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # set up main window
         self.mainWidget = QtWidgets.QWidget(self)
         self.setCentralWidget(self.mainWidget)
-        self.setMinimumWidth(1000)
-        self.setMinimumHeight(900)
+        self.setMinimumWidth(self.MIN_WINDOW_WIDTH)
+        self.setMinimumHeight(self.MIN_WINDOW_HEIGHT)
         self.setWindowTitle('Swath Accuracy Plotter v.%s - kjerram@ccom.unh.edu & pjohnson@ccom.unh.edu' % __version__)
         self.setWindowIcon(QtGui.QIcon(os.path.join(self.media_path, "icon.png")))
 
@@ -591,7 +597,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.file_list = FileList()  # add file list with extended selection and icon size = (0,0) to avoid indent
         self.file_list.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
-        self.file_list.setFixedWidth(350)
+        self.file_list.setMinimumWidth(280)
         file_sources_layout = BoxLayout([self.file_list, add_crosslines_layout], 'v')
         file_gb = GroupBox('Crossline Data', file_sources_layout, False, False, 'file_gb')
         file_gb.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.Minimum)
@@ -623,12 +629,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.progress_dialog.hide_progress()
 
     def set_center_layout(self):  # set center layout with swath coverage plot
+        expanding = QtWidgets.QSizePolicy.Policy.Expanding
         # add figure instance and layout for swath accuracy plots
         self.swath_canvas_height = 10
         self.swath_canvas_width = 10
         self.swath_figure = Figure(figsize=(self.swath_canvas_width, self.swath_canvas_height))
         self.swath_canvas = FigureCanvas(self.swath_figure)  # canvas widget that displays the figure
-        self.swath_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.swath_canvas.setSizePolicy(expanding, expanding)
         self.swath_toolbar = NavigationToolbar(self.swath_canvas, self) # swath plot toolbar
         self.x_max = 0.0
         self.y_max = 0.0
@@ -639,7 +646,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.surf_canvas_width = 10
         self.surf_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.surf_canvas = FigureCanvas(self.surf_figure)
-        self.surf_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.surf_canvas.setSizePolicy(expanding, expanding)
         self.surf_toolbar = NavigationToolbar(self.surf_canvas, self)
         self.x_max_surf = 0.0
         self.y_max_surf = 0.0
@@ -650,7 +657,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.surf_canvas_width = 10
         self.surf_final_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.surf_final_canvas = FigureCanvas(self.surf_final_figure)
-        self.surf_final_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.surf_final_canvas.setSizePolicy(expanding, expanding)
         self.surf_final_toolbar = NavigationToolbar(self.surf_final_canvas, self)
         # self.x_max_surf = 0.0
         # self.y_max_surf = 0.0
@@ -661,7 +668,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tide_canvas_width = 10
         self.tide_figure = Figure(figsize=(self.tide_canvas_width, self.tide_canvas_height))
         self.tide_canvas = FigureCanvas(self.tide_figure)
-        self.tide_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.tide_canvas.setSizePolicy(expanding, expanding)
         self.tide_toolbar = NavigationToolbar(self.tide_canvas, self)
         self.x_max_tide = 0.0
         self.y_max_tide = 0.0
@@ -670,91 +677,88 @@ class MainWindow(QtWidgets.QMainWindow):
         # set up tabs
         self.plot_tabs = QtWidgets.QTabWidget()
         self.plot_tabs.setStyleSheet("background-color: none")
-        self.plot_tabs.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
+        self.plot_tabs.setSizePolicy(expanding, expanding)
 
         # set up tab 1: accuracy results
         self.plot_tab1 = QtWidgets.QWidget()
-        self.plot_tab1.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
+        self.plot_tab1.setSizePolicy(expanding, expanding)
         self.plot_tab1.layout = self.swath_layout
         self.plot_tab1.setLayout(self.plot_tab1.layout)
 
         # set up tab 2: reference surface
         self.plot_tab2 = QtWidgets.QWidget()
-        try:
-            self.plot_tab2.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
-        except AttributeError:
-            self.plot_tab2.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
+        self.plot_tab2.setSizePolicy(expanding, expanding)
         self.plot_tab2.layout = self.surf_layout
         self.plot_tab2.setLayout(self.plot_tab2.layout)
 
         # set up tab 3: final masked reference surface
         self.plot_tab3 = QtWidgets.QWidget()
-        try:
-            self.plot_tab3.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
-        except AttributeError:
-            self.plot_tab3.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
+        self.plot_tab3.setSizePolicy(expanding, expanding)
         self.plot_tab3.layout = self.surf_final_layout
         self.plot_tab3.setLayout(self.plot_tab3.layout)
 
         # NEW: set up tab 4: Ref Density Final
         self.plot_tab_density_final = QtWidgets.QWidget()
+        self.plot_tab_density_final.setSizePolicy(expanding, expanding)
         self.density_final_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.density_final_canvas = FigureCanvas(self.density_final_figure)
-        self.density_final_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.density_final_canvas.setSizePolicy(expanding, expanding)
         self.density_final_toolbar = NavigationToolbar(self.density_final_canvas, self)
         self.density_final_layout = BoxLayout([self.density_final_toolbar, self.density_final_canvas], 'v')
         self.plot_tab_density_final.setLayout(self.density_final_layout)
 
         # NEW: set up tab 5: Ref Slope Final
         self.plot_tab_slope_final = QtWidgets.QWidget()
+        self.plot_tab_slope_final.setSizePolicy(expanding, expanding)
         self.slope_final_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.slope_final_canvas = FigureCanvas(self.slope_final_figure)
-        self.slope_final_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.slope_final_canvas.setSizePolicy(expanding, expanding)
         self.slope_final_toolbar = NavigationToolbar(self.slope_final_canvas, self)
         self.slope_final_layout = BoxLayout([self.slope_final_toolbar, self.slope_final_canvas], 'v')
         self.plot_tab_slope_final.setLayout(self.slope_final_layout)
 
         # NEW: set up tab 4: Depth
         self.plot_tab_depth = QtWidgets.QWidget()
+        self.plot_tab_depth.setSizePolicy(expanding, expanding)
         self.depth_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.depth_canvas = FigureCanvas(self.depth_figure)
-        self.depth_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.depth_canvas.setSizePolicy(expanding, expanding)
         self.depth_toolbar = NavigationToolbar(self.depth_canvas, self)
         self.depth_layout = BoxLayout([self.depth_toolbar, self.depth_canvas], 'v')
         self.plot_tab_depth.setLayout(self.depth_layout)
 
         # NEW: set up tab 6: Ref Uncertainty
         self.plot_tab_uncertainty_final = QtWidgets.QWidget()
+        self.plot_tab_uncertainty_final.setSizePolicy(expanding, expanding)
         self.uncertainty_final_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.uncertainty_final_canvas = FigureCanvas(self.uncertainty_final_figure)
-        self.uncertainty_final_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.uncertainty_final_canvas.setSizePolicy(expanding, expanding)
         self.uncertainty_final_toolbar = NavigationToolbar(self.uncertainty_final_canvas, self)
         self.uncertainty_final_layout = BoxLayout([self.uncertainty_final_toolbar, self.uncertainty_final_canvas], 'v')
         self.plot_tab_uncertainty_final.setLayout(self.uncertainty_final_layout)
 
         # set up tab 4: crossline tide (now will be tab 9)
         self.plot_tab4 = QtWidgets.QWidget()
-        try:
-            self.plot_tab4.setSizePolicy(QtWidgets.QSizePolicy.Policy.Maximum, QtWidgets.QSizePolicy.Policy.Maximum)
-        except AttributeError:
-            self.plot_tab4.setSizePolicy(QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Maximum)
+        self.plot_tab4.setSizePolicy(expanding, expanding)
         self.plot_tab4.layout = self.tide_layout
         self.plot_tab4.setLayout(self.plot_tab4.layout)
 
         # NEW: set up tab 8: Soundings per bin
         self.plot_tab_soundings = QtWidgets.QWidget()
+        self.plot_tab_soundings.setSizePolicy(expanding, expanding)
         self.soundings_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.soundings_canvas = FigureCanvas(self.soundings_figure)
-        self.soundings_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.soundings_canvas.setSizePolicy(expanding, expanding)
         self.soundings_toolbar = NavigationToolbar(self.soundings_canvas, self)
         self.soundings_layout = BoxLayout([self.soundings_toolbar, self.soundings_canvas], 'v')
         self.plot_tab_soundings.setLayout(self.soundings_layout)
 
         # NEW: set up tab 9: Ping soundings distribution
         self.plot_tab_ping_soundings = QtWidgets.QWidget()
+        self.plot_tab_ping_soundings.setSizePolicy(expanding, expanding)
         self.ping_soundings_figure = Figure(figsize=(self.surf_canvas_width, self.surf_canvas_height))
         self.ping_soundings_canvas = FigureCanvas(self.ping_soundings_figure)
-        self.ping_soundings_canvas.setSizePolicy(QtWidgets.QSizePolicy.Policy.MinimumExpanding, QtWidgets.QSizePolicy.Policy.MinimumExpanding)
+        self.ping_soundings_canvas.setSizePolicy(expanding, expanding)
         self.ping_soundings_toolbar = NavigationToolbar(self.ping_soundings_canvas, self)
         self.ping_soundings_layout = BoxLayout([self.ping_soundings_toolbar, self.ping_soundings_canvas], 'v')
         self.plot_tab_ping_soundings.setLayout(self.ping_soundings_layout)
@@ -774,7 +778,60 @@ class MainWindow(QtWidgets.QMainWindow):
         self.plot_tabs.addTab(self.plot_tab4, 'Tide')
 
         self.center_layout = BoxLayout([self.plot_tabs], 'v')
-        # self.center_layout.addStretch()
+        self.center_layout.setStretch(0, 1)
+
+        for plot_layout in [
+            self.swath_layout, self.surf_layout, self.surf_final_layout, self.tide_layout,
+            self.density_final_layout, self.slope_final_layout, self.depth_layout,
+            self.uncertainty_final_layout, self.soundings_layout, self.ping_soundings_layout,
+        ]:
+            if plot_layout.count() > 1:
+                plot_layout.setStretch(0, 0)
+                plot_layout.setStretch(1, 1)
+
+    def _wrap_layout_in_scroll_area(self, layout, min_width):
+        """Wrap a layout in a scroll area for resizable side panels."""
+        container = QtWidgets.QWidget()
+        container.setLayout(layout)
+        container.setMinimumWidth(min_width)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidget(container)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll.setMinimumWidth(min_width)
+        return scroll
+
+    def set_main_layout(self):
+        # resizable three-column layout: scrollable side panels and flexible plot area
+        self.left_scroll = self._wrap_layout_in_scroll_area(self.left_layout, self.LEFT_PANEL_MIN_WIDTH)
+        self.right_scroll = self._wrap_layout_in_scroll_area(self.right_layout, self.RIGHT_PANEL_MIN_WIDTH)
+
+        center_widget = QtWidgets.QWidget()
+        center_widget.setLayout(self.center_layout)
+        center_widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
+
+        self.main_splitter = QtWidgets.QSplitter(Qt.Orientation.Horizontal)
+        self.main_splitter.addWidget(self.left_scroll)
+        self.main_splitter.addWidget(center_widget)
+        self.main_splitter.addWidget(self.right_scroll)
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 1)
+        self.main_splitter.setStretchFactor(2, 0)
+        self.main_splitter.setCollapsible(0, False)
+        self.main_splitter.setCollapsible(1, False)
+        self.main_splitter.setCollapsible(2, False)
+        self.main_splitter.setSizes([360, 980, 360])
+
+        main_layout = QtWidgets.QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(self.main_splitter)
+        self.mainWidget.setLayout(main_layout)
 
     def initialize_default_filters(self):
         """Initialize all filter controls with their default values"""
@@ -1493,11 +1550,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(self.tab1, 'Plot')
         self.tabs.addTab(self.tab2, 'Filter')
 
-        self.tabw = 340  # set fixed tab width
-        self.tabs.setFixedWidth(self.tabw)
+        self.tabw = 340  # preferred width for plot/filter tabs
+        self.tabs.setMinimumWidth(self.tabw)
+        self.tabs.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
 
         self.right_layout = BoxLayout([self.tabs], 'v')
-        self.right_layout.addStretch()
 
     def _detect_ref_filter_changes(self, old_filters):
         """Detect if reference surface filters have changed"""
@@ -1568,16 +1625,6 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f"Error detecting crossline filter changes: {str(e)}")
             return True  # Assume changes occurred if detection fails
         
-    def set_main_layout(self):
-        # set the main layout with file controls on left and swath figure on right
-        main_layout = QtWidgets.QHBoxLayout()
-        main_layout.addLayout(self.left_layout)
-        # main_layout.addLayout(self.swath_layout)
-        main_layout.addLayout(self.center_layout)
-        main_layout.addLayout(self.right_layout)
-        
-        self.mainWidget.setLayout(main_layout)
-
     def _setup_density_tooltip(self):
         """Setup mouse motion event handler for density plot tooltip"""
         try:
@@ -1962,8 +2009,7 @@ if __name__ == '__main__':
     _apply_dark_fusion_style(app)
     print("Creating MainWindow...")
     main = MainWindow()
-    main.resize(1700, 1100)  # Set initial size to 1700x1100 pixels
-    main.setFixedSize(1700, 1100)  # Prevent window resizing
+    main.resize(main.DEFAULT_WINDOW_WIDTH, main.DEFAULT_WINDOW_HEIGHT)
     print("Showing MainWindow...")
     main.show()
     print("Entering event loop...")

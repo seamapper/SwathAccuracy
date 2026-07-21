@@ -29,6 +29,10 @@ from scipy.spatial import cKDTree as KDTree
 from scipy.ndimage import uniform_filter
 from scipy.interpolate import interp1d
 from datetime import timedelta, datetime
+
+# Fixed matplotlib export geometry (independent of on-screen widget size).
+EXPORT_FIGSIZE_IN = (10, 10)
+EXPORT_DPI = 600
 import matplotlib.dates as mdates
 
 
@@ -4349,7 +4353,7 @@ def save_plot(self):
 	if fname_out:  # Only save if a filename was selected
 		try:
 			self.swath_figure.savefig(fname_out,
-						dpi=600, facecolor='w', edgecolor='k',
+						dpi=EXPORT_DPI, facecolor='w', edgecolor='k',
 						transparent=False, bbox_inches='tight', pad_inches=0.1)
 			update_log(self, 'Saved figure ' + fname_out.rsplit('/')[-1])
 		except Exception as e:
@@ -4487,7 +4491,7 @@ def save_analysis(self):
 				
 				# Save the figure
 				figure.savefig(filepath,
-					  dpi=600, facecolor='w', edgecolor='k',
+					  dpi=EXPORT_DPI, facecolor='w', edgecolor='k',
 					  transparent=False, bbox_inches='tight', pad_inches=0.1)
 				saved_count += 1
 				update_log(self, f'Saved {plot_name} plot: {filename}')
