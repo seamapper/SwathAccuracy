@@ -48,6 +48,10 @@ cmd = [
     "swath_accuracy_plotter.py",
     "--clean",
 ]
+media_dir = os.path.join(script_dir, "media")
+if os.path.isdir(media_dir):
+    data_sep = ";" if os.name == "nt" else ":"
+    cmd.insert(-2, f"--add-data={media_dir}{data_sep}media")
 if os.path.isfile(icon_path):
     cmd.insert(-2, "--icon=" + icon_path)
 

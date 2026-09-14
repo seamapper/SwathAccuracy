@@ -62,7 +62,6 @@ __version__ = "2026.10"
 
 import sys
 import os
-import datetime
 
 # Add the script's directory to the Python path to ensure imports work
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -106,10 +105,17 @@ class MainWindow(QtWidgets.QMainWindow):
         # set up main window
         self.mainWidget = QtWidgets.QWidget(self)
         self.setCentralWidget(self.mainWidget)
+        if getattr(sys, 'frozen', False) and getattr(sys, '_MEIPASS', None):
+            self.media_path = os.path.join(sys._MEIPASS, 'media')
+        else:
+            self.media_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'media')
         self.setMinimumWidth(self.MIN_WINDOW_WIDTH)
         self.setMinimumHeight(self.MIN_WINDOW_HEIGHT)
         self.setWindowTitle('Swath Accuracy Plotter v.%s - kjerram@ccom.unh.edu & pjohnson@ccom.unh.edu' % __version__)
-        self.setWindowIcon(QtGui.QIcon(os.path.join(self.media_path, "icon.png")))
+        window_icon = os.path.join(self.media_path, 'mac.ico')
+        if not os.path.isfile(window_icon):
+            window_icon = os.path.join(self.media_path, 'icon.png')
+        self.setWindowIcon(QtGui.QIcon(window_icon))
 
         print("Setting up Windows taskbar icon...")
         if os.name == 'nt':  # necessary to explicitly set taskbar icon
@@ -632,10 +638,11 @@ class MainWindow(QtWidgets.QMainWindow):
     @staticmethod
     def _program_freeze_date_text():
         """Return freeze/build date for the About tab (exe mtime when frozen)."""
+        from datetime import datetime
         if getattr(sys, 'frozen', False):
             try:
                 ts = os.path.getmtime(sys.executable)
-                return datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+                return datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
             except OSError:
                 return 'Unknown'
         return 'Not frozen (running from source)'
@@ -649,6 +656,8 @@ class MainWindow(QtWidgets.QMainWindow):
         meipass = getattr(sys, '_MEIPASS', None)
         if meipass:
             candidates.insert(0, os.path.join(meipass, 'media', filename))
+        if getattr(sys, 'frozen', False):
+            candidates.append(os.path.join(os.path.dirname(sys.executable), 'media', filename))
         for path in candidates:
             if path and os.path.isfile(path):
                 return path
@@ -674,8 +683,12 @@ class MainWindow(QtWidgets.QMainWindow):
 
         logo_label = QtWidgets.QLabel()
         logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_path = self._resolve_media_file('mac.png')
-        pixmap = QtGui.QPixmap(logo_path)
+        pixmap = QtGui.QPixmap()
+        for logo_name in ('mac.png', 'CCOM_MAC.png', 'CCOM.png'):
+            logo_path = self._resolve_media_file(logo_name)
+            pixmap = QtGui.QPixmap(logo_path)
+            if not pixmap.isNull():
+                break
         if not pixmap.isNull():
             max_w = 280
             if pixmap.width() > max_w:
